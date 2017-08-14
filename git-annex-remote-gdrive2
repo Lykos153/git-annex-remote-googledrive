@@ -16,6 +16,12 @@ from abc import ABC, abstractmethod
 import sys
 import string
 
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
+
+# redirect all output to stderr
+output = sys.stdout
+sys.stdout = sys.stderr
 
 # Exceptions
 class RequestError(Exception):
@@ -27,28 +33,49 @@ class UnsupportedRequest(RequestError):
 class UnexpectedRequest(RequestError):
     pass
 
-class PrepareFailure(Exception):
+class PrepareFailure(RemoteReply):
     pass
 
-class InitremoteFailure(Exception):
+class InitremoteFailure(RemoteReply):
     pass
 
-class TransferFailure(Exception):
+class RemoteReply():
     pass
 
-class CheckpresentFailure(Exception):
+class TransferSuccess(RemoteReply):
     pass
 
-class RemoveFailure(Exception):
+class TransferFailure(RemoteReply):
     pass
 
-class ClaimurlFailure(Exception):
+class CheckpresentSuccess(RemoteReply):
     pass
 
-class CheckurlFailure(Exception):
+class CheckpresentFailure(RemoteReply):
     pass
 
-class WhereisFailure(Exception):
+class RemoveSuccess(RemoteReply):
+    pass
+
+class RemoveFailure(RemoteReply):
+    pass
+
+class ClaimurlSuccess(RemoteReply):
+    pass
+
+class ClaimurlFailure(RemoteReply):
+    pass
+
+class CheckurlSuccess(RemoteReply):
+    pass
+
+class CheckurlFailure(RemoteReply):
+    pass
+
+class WhereisSuccess(RemoteReply):
+    pass
+
+class WhereisFailure(RemoteReply):
     pass
 
 class SpecialRemote(ABC):
@@ -76,12 +103,14 @@ class SpecialRemote(ABC):
     def remove(self, key):
         pass
     
+    # Wrapper for transfer_store and transfer_retrieve
     def transfer(self, method, key, file_):
         if method == "STORE":
             self.transfer_store(key, file_)
         elif method == "RETRIEVE":
             self.transfer_retrieve(key, file_)
-    
+   
+    # Optional requests
     def getcost(self):
         raise UnsupportedRequest()
 
@@ -95,29 +124,180 @@ class SpecialRemote(ABC):
         raise UnsupportedRequest()
 
 
+# The Google class
+class GoogleRemote(SpecialRemote):
+
+    def __init__(self):
+        # Authentication
+        self.gauth = GoogleAuth()
+        self.gauth.settings['client_config_backend'] = 'settings'
+        self.gauth.settings['client_config'] = {'client_id': '914459249505-ji3d9v92ealsmc4a63ns66uoj9t6mdf0.apps.googleusercontent.com', 'client_secret': 'ivD4Ms4eROu10sHc43ojgX05', 'auth_uri':'https://accounts.google.com/o/oauth2/auth', 'token_uri':'https://accounts.google.com/o/oauth2/token', 'revoke_uri': None, 'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob'}
+        
+    def initremote(self):
+        self.gauth.LoadCredentialsFile("token.json")
+        
+        if self.gauth.credentials is None:
+            #self.gauth.CommandLineAuth()
+            self.gauth.LocalWebserverAuth()
+        elif self.gauth.access_token_expired:
+            self.gauth.Refresh()
+        else:
+            self.gauth.Authorize()
+        
+        self.gauth.SaveCredentialsFile("token.json")
+        self.drive = GoogleDrive(self.gauth)
+
+        self.prefix = getconfig("prefix")
+        try:
+            self.root = self.getfolderid(self.prefix)
+        except:
+            raise InitremoteFailure("Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive.")
+        setconfig("root_id", self.root['id'])
+
+        send("INITREMOTE-SUCCESS")
+
+    def prepare(self):
+        self.gauth.LoadCredentialsFile("token.json")
+        
+        if self.gauth.credentials is None:
+            #self.gauth.CommandLineAuth()
+            self.gauth.LocalWebserverAuth()
+        elif self.gauth.access_token_expired:
+            self.gauth.Refresh()
+        else:
+            self.gauth.Authorize()
+        
+        self.gauth.SaveCredentialsFile("token.json")
+        self.drive = GoogleDrive(self.gauth)
+
+        self.prefix = getconfig("prefix")
+        try:
+            self.root = self.getfolderid(self.prefix)
+        except:
+            raise PrepareFailure("Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive.")
+        if self.root['id'] != getconfig("root_id"):
+            raise PrepareFailure("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
+
+        send("PREPARE-SUCCESS")
+
+    def transfer_store(self, key, file_):
+        try:
+            file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}' and trashed=false"}).GetList()
+        except:
+            send(f"TRANSFER-FAILURE STORE {key}")
+        else:
+            if (len(file_list) == 1):
+                self.storeid(key, file_list[0]['id'])
+                send(f"TRANSFER-SUCCESS STORE {key}")
+            elif (len(file_list) == 0):
+                newfile = self.drive.CreateFile({'title': key, 'parents': [{'kind': 'drive#parentReference', 'id': self.root['id']}] })
+                newfile.SetContentFile(file_)
+                try:
+                    newfile.Upload()
+                except:
+                    send(f"TRANSFER-FAILURE STORE {key}")
+                else:
+                    self.storeid(key, newfile['id'])
+                    send(f"TRANSFER-SUCCESS STORE {key}")
+            else:
+                raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
+    
+    def transfer_retrieve(self, key, file_):
+        newfile = self.drive.CreateFile({'id': self.getfileid(key)})
+        try:
+            newfile.GetContentFile(file_)
+        except:
+            send(f"TRANSFER-FAILURE RETRIEVE {key}")
+        else:
+            send(f"TRANSFER-SUCCESS RETRIEVE {key}")
+    
+    def checkpresent(self, key):
+        try:
+            file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}' and trashed=false"}).GetList()
+        except:
+            send(f"CHECKPRESENT-UNKNOWN {key}")
+        else:
+            if (len(file_list) == 1):
+                self.storeid(key, file_list[0]['id'])
+                send(f"CHECKPRESENT-SUCCESS {key}")
+            elif (len(file_list) == 0):
+                send(f"CHECKPRESENT-FAILURE {key}")
+            else:
+                raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
+
+    def remove(self, key):
+        try:
+            file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}'"}).GetList()
+        except:
+            send(f"REMOVE-FAILURE {key}")
+        else:
+            if (len(file_list) == 0):
+                send(f"REMOVE-SUCCESS {key}")
+            else:
+                try:
+                    for file_ in file_list:
+                        file_.Delete()
+                except:
+                    send(f"REMOVE-FAILURE {key}")
+                else:
+                    send(f"REMOVE-SUCCESS {key}")
+
+
+    def storeid(self, key, id_):
+        setstate(key, id_)
+
+    def getfileid(self, key):
+        #id_ = getstate(key)
+        #if id_:
+        #    return id_
+        file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}' and trashed=false"}).GetList()
+        if (len(file_list) == 1):
+            return file_list[0]['id']
+        elif (len(file_list) == 0):
+            return None
+        else:
+            raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
+    
+    def getfolderid(self, path):
+        path_list = path.split('/')
+        current_folder = self.drive.CreateFile({'id': 'root'})
+        current_path = ""
+        for folder in path_list:
+            current_path = "/".join([current_path, folder])
+            file_list = self.drive.ListFile({'q': f"'{current_folder['id']}' in parents and title='{folder}' and trashed=false"}).GetList()
+            if (len(file_list) == 1):
+                current_folder = file_list[0]
+            elif (len(file_list) == 0):
+                current_folder = self.drive.CreateFile({'title': folder, 'parents': [{'kind': 'drive#parentReference', 'id': current_folder['id']}], 'mimeType': "application/vnd.google-apps.folder"})
+                current_folder.Upload()
+            else:
+                raise self.AmbiguousFilenameException (f"There are two or more folders named {current_path}")
+        return current_folder
+
+    class FileNotFoundException(Exception):
+        pass
+    class AmbiguousFilenameException(Exception):
+        pass
 
 class DummyRemote(SpecialRemote):
     def initremote(self):
-        eprint("Initialising")
+        print("Initialising")
     def prepare(self):
-        eprint("Preparing")
+        print("Preparing")
     def transfer_store(self, key, file_):
-        eprint(f"Uploading {file_} to {key}")
+        print(f"Uploading {file_} to {key}")
     def transfer_retrieve(self, key, file_):
-        eprint(f"Downloading {key} to {file_}")
+        print(f"Downloading {key} to {file_}")
     def checkpresent(self, key):
-        eprint(f"Checking {key}")
+        print(f"Checking {key}")
     def remove(self, key):
-        eprint(f"Removing {key}")
+        print(f"Removing {key}")
 
 class RemoteMaster:
     pass
 
-def send(msg):
-    print(msg)
-
 def getconfig(req):
-    print(f"GETVALUE {req}")
+    send(f"GETCONFIG {req}")
     line = sys.stdin.readline().rstrip().split()
     if line[0] == "VALUE":
         if len(line) == 2:
@@ -132,10 +312,10 @@ def setconfig(key, value):
     for s in (key, value):
         if any([c in s for c in string.whitespace]):
             raise Exception(f"Cannot set config. {s} contains whitespace")
-    print(f"SETCONFIG {key} {value}")
+    send(f"SETCONFIG {key} {value}")
 
 def getstate(key):
-    print(f"GETSTATE {key}")
+    send(f"GETSTATE {key}")
     line = sys.stdin.readline().rstrip().split()
     if line[0] == "VALUE":
         if len(line) == 2:
@@ -150,14 +330,21 @@ def setstate(key, value):
     for s in (key, value):
         if any([c in s for c in string.whitespace]):
             raise Exception(f"Cannot set config. {s} contains whitespace")
-    print(f"SETSTATE {key} {value}")
+    send(f"SETSTATE {key} {value}")
 
 
-def eprint(*args, **kwargs):
-    print(*args, file=sys.stderr, **kwargs)
+def send(*args, **kwargs):
+    print(*args, file=output, **kwargs)
+    output.flush()
+
+def debug(*args):
+    send("DEBUG", *args)
 
 def main():
-    remote = DummyRemote()
+
+    send("VERSION 1")
+
+    remote = GoogleRemote()
     requests = { "INITREMOTE": remote.initremote,
                  "PREPARE": remote.prepare,
                  "TRANSFER": remote.transfer,
@@ -168,23 +355,22 @@ def main():
                  "CHECKURL": remote.checkurl,
                  "WHEREIS": remote.whereis }
 
-    print("VERSION 1")
     for line in sys.stdin:
         line = line.rstrip()
-        eprint (f"#Input: {line}")
+        print (f"#Input: {line}")
         line = line.split()
-        eprint (f"#request: {line[0]}, params: {line[1:]}")
+        print (f"#request: {line[0]}, params: {line[1:]}")
         try:
             if line[0] not in requests.keys():
                 raise UnsupportedRequest()
             requests[line[0]](*line[1:])
         except (UnsupportedRequest):
-            print ("UNSUPPORTED-REQUEST")
+            send ("UNSUPPORTED-REQUEST")
         except (NotImplementedError):
-            print ("ERROR not yet implemented")
+            send ("ERROR not yet implemented")
             raise SystemExit
         #except Exception as e:
-        #    print (f"ERROR {e}")
+        #    send (f"ERROR {e}")
         #    raise SystemExit
 
 
