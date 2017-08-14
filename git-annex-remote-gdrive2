@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.6
 # git-annex-remote-gdrive2 - python rewrite of git-annex-remote-gdrive to add direct support for Google Drive to git annex
 #
-# Install in PATH as git-annex-remote-gdrive
+# Install in PATH as git-annex-remote-gdrive2
 #
 # Copyright (C) 2017  Silvio Ankermann
 #
@@ -11,3 +11,184 @@
 # This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
 # warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 #
+
+from abc import ABC, abstractmethod
+import sys
+import string
+
+
+# Exceptions
+class RequestError(Exception):
+    pass
+
+class UnsupportedRequest(RequestError):
+    pass
+
+class UnexpectedRequest(RequestError):
+    pass
+
+class PrepareFailure(Exception):
+    pass
+
+class InitremoteFailure(Exception):
+    pass
+
+class TransferFailure(Exception):
+    pass
+
+class CheckpresentFailure(Exception):
+    pass
+
+class RemoveFailure(Exception):
+    pass
+
+class ClaimurlFailure(Exception):
+    pass
+
+class CheckurlFailure(Exception):
+    pass
+
+class WhereisFailure(Exception):
+    pass
+
+class SpecialRemote(ABC):
+    @abstractmethod
+    def initremote(self):
+        pass
+
+    @abstractmethod
+    def prepare(self):
+        pass
+
+    @abstractmethod
+    def transfer_store(self, key, file_):
+        pass
+
+    @abstractmethod
+    def transfer_retrieve(self, key, file_):
+        pass
+
+    @abstractmethod
+    def checkpresent(self, key):
+        pass
+
+    @abstractmethod
+    def remove(self, key):
+        pass
+    
+    def transfer(self, method, key, file_):
+        if method == "STORE":
+            self.transfer_store(key, file_)
+        elif method == "RETRIEVE":
+            self.transfer_retrieve(key, file_)
+    
+    def getcost(self):
+        raise UnsupportedRequest()
+
+    def getavailability(self):
+        raise UnsupportedRequest()
+
+    def checkurl(self):
+        raise UnsupportedRequest()
+
+    def whereis(self):
+        raise UnsupportedRequest()
+
+
+
+class DummyRemote(SpecialRemote):
+    def initremote(self):
+        eprint("Initialising")
+    def prepare(self):
+        eprint("Preparing")
+    def transfer_store(self, key, file_):
+        eprint(f"Uploading {file_} to {key}")
+    def transfer_retrieve(self, key, file_):
+        eprint(f"Downloading {key} to {file_}")
+    def checkpresent(self, key):
+        eprint(f"Checking {key}")
+    def remove(self, key):
+        eprint(f"Removing {key}")
+
+class RemoteMaster:
+    pass
+
+def send(msg):
+    print(msg)
+
+def getconfig(req):
+    print(f"GETVALUE {req}")
+    line = sys.stdin.readline().rstrip().split()
+    if line[0] == "VALUE":
+        if len(line) == 2:
+            return line[1]
+        else:
+            return None
+    else:
+        raise UnexpectedRequest("Expected VALUE")
+
+def setconfig(key, value):
+    # make sure there is no whitespace
+    for s in (key, value):
+        if any([c in s for c in string.whitespace]):
+            raise Exception(f"Cannot set config. {s} contains whitespace")
+    print(f"SETCONFIG {key} {value}")
+
+def getstate(key):
+    print(f"GETSTATE {key}")
+    line = sys.stdin.readline().rstrip().split()
+    if line[0] == "VALUE":
+        if len(line) == 2:
+            return line[1]
+        else:
+            return None
+    else:
+        raise UnexpectedRequest("Expected VALUE")
+
+def setstate(key, value):
+    # make sure there is no whitespace
+    for s in (key, value):
+        if any([c in s for c in string.whitespace]):
+            raise Exception(f"Cannot set config. {s} contains whitespace")
+    print(f"SETSTATE {key} {value}")
+
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+def main():
+    remote = DummyRemote()
+    requests = { "INITREMOTE": remote.initremote,
+                 "PREPARE": remote.prepare,
+                 "TRANSFER": remote.transfer,
+                 "CHECKPRESENT": remote.checkpresent,
+                 "REMOVE": remote.remove,
+                 "GETCOST": remote.getcost,
+                 "GETAVAILABILITY": remote.getavailability,
+                 "CHECKURL": remote.checkurl,
+                 "WHEREIS": remote.whereis }
+
+    print("VERSION 1")
+    for line in sys.stdin:
+        line = line.rstrip()
+        eprint (f"#Input: {line}")
+        line = line.split()
+        eprint (f"#request: {line[0]}, params: {line[1:]}")
+        try:
+            if line[0] not in requests.keys():
+                raise UnsupportedRequest()
+            requests[line[0]](*line[1:])
+        except (UnsupportedRequest):
+            print ("UNSUPPORTED-REQUEST")
+        except (NotImplementedError):
+            print ("ERROR not yet implemented")
+            raise SystemExit
+        #except Exception as e:
+        #    print (f"ERROR {e}")
+        #    raise SystemExit
+
+
+if __name__ == "__main__":
+    main()
+
+
