@@ -351,10 +351,24 @@ class RemoteMaster:
             return None
         else:
             raise UnexpectedMessage(f"Expected {reply_keyword} and {reply_count} values")
+
+    def __askvalues(self, request):
+        self.__send(request)
+        reply = []
+        for line in self.input:
+            if len(line) == 2 and line[0] == "VALUE":
+                 reply.append(line[1])
+            elif len(line) == 1 and line[0] == "VALUE":
+                return reply
+            else:
+                raise UnexpectedMessage("Expected VALUE {value}")
+
+    def __askvalue(self, request):
+        (reply,) = self.__ask(request, "VALUE", 1)
+        return reply
     
     def getconfig(self, req):
-        (reply,) = self.__ask(f"GETCONFIG {req}", "VALUE", 1)
-        return reply
+        return self.__askvalue(f"GETCONFIG {req}")
 
     def setconfig(self, key, value):
         # make sure there is no whitespace
@@ -364,8 +378,7 @@ class RemoteMaster:
         self.__send(f"SETCONFIG {key} {value}")
 
     def getstate(self, key):
-        (reply,) = self.__ask(f"GETSTATE {key}", "VALUE", 1)
-        return reply
+        return self.__askvalue(f"GETSTATE {key}")
 
     def setstate(self, key, value):
         # make sure there is no whitespace
@@ -377,6 +390,51 @@ class RemoteMaster:
     def debug(self, *args):
         self.__send("DEBUG", *args)
 
+    def progress(self, progress):
+        if type(progress) == int:
+            self.send("PROGRESS", progress)
+        else:
+            raise TypeError("Expected integer")
+
+    def dirhash(self, key):
+        return self.__askvalue(f"DIRHASH {key}")
+
+    def dirhash_lower(self, key):
+        return self.__askvalue(f"DIRHASH-LOWER {key}")
+
+    def setcreds(self, setting, user, password):
+        self.__send(setting, user, password)
+
+    def getcreds(self, setting):
+        (user, password) = self.__ask(f"GETCREDS {setting}", "CREDS", 2)
+        return {'user': user, 'password': password}
+
+    def getuuid(self):
+        return self.__askvalue("GETUUID")
+
+    def getgitdir(self):
+        return self.__askvalue("GETGITDIR")
+
+    def setwanted(self, prefcontent):
+        self.__send("SETWANTED", prefcontent)
+
+    def getwanted(self):
+        return self.__askvalue("GETWANTED")
+
+    def seturlpresent(self, key, url):
+        self.__send("SETURLPRESENT", key, url)
+
+    def seturlmissing(self, key, url):
+        self.__send("SETURLMISSING", key, url)
+
+    def seturipresent(self, key, uri):
+        self.__send("SETURIPRESENT", key, uri)
+    
+    def seturimissing(self, key, uri):
+        self.__send("SETURIMISSING", key, uri)
+
+    def geturls(self, key, prefix):
+        return askvalues(f"GETURLS {key} {prefix}")
 
     def __send(self, *args, **kwargs):
         print(*args, file=self.output, **kwargs)
