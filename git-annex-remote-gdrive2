@@ -155,7 +155,7 @@ class GoogleRemote(SpecialRemote):
 
             self.drive = GoogleDrive(self.gauth)
             
-            self.root = self.getfolderid(self.prefix)
+            self.root = self.__getfolder(self.prefix)
         except:
             return "INITREMOTE-FAILURE Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive."
         setconfig("root_id", self.root['id'])
@@ -179,7 +179,7 @@ class GoogleRemote(SpecialRemote):
             self.gauth.SaveCredentialsFile("token.json")
             self.drive = GoogleDrive(self.gauth)
 
-            self.root = self.getfolderid(self.prefix)
+            self.root = self.__getfolder(self.prefix)
         except:
             return "PREPARE-FAILURE Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive."
         if self.root['id'] != getconfig("root_id"):
@@ -194,7 +194,7 @@ class GoogleRemote(SpecialRemote):
             return f"TRANSFER-FAILURE STORE {key}"
         else:
             if (len(file_list) == 1):
-                self.storeid(key, file_list[0]['id'])
+                self.__storeid(key, file_list[0]['id'])
                 return f"TRANSFER-SUCCESS STORE {key}"
             elif (len(file_list) == 0):
                 newfile = self.drive.CreateFile({'title': key, 'parents': [{'kind': 'drive#parentReference', 'id': self.root['id']}] })
@@ -204,14 +204,14 @@ class GoogleRemote(SpecialRemote):
                 except:
                     return f"TRANSFER-FAILURE STORE {key}"
                 else:
-                    self.storeid(key, newfile['id'])
+                    self.__storeid(key, newfile['id'])
                     return f"TRANSFER-SUCCESS STORE {key}"
             else:
                 raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
     
     def transfer_retrieve(self, key, file_):
         try:
-            newfile = self.drive.CreateFile({'id': self.getfileid(key)})
+            newfile = self.__getfile(key)
             newfile.GetContentFile(file_)
         except:
             return f"TRANSFER-FAILURE RETRIEVE {key}"
@@ -225,7 +225,7 @@ class GoogleRemote(SpecialRemote):
             return f"CHECKPRESENT-UNKNOWN {key}"
         else:
             if (len(file_list) == 1):
-                self.storeid(key, file_list[0]['id'])
+                self.__storeid(key, file_list[0]['id'])
                 return f"CHECKPRESENT-SUCCESS {key}"
             elif (len(file_list) == 0):
                 return f"CHECKPRESENT-FAILURE {key}"
@@ -250,22 +250,22 @@ class GoogleRemote(SpecialRemote):
                     return f"REMOVE-SUCCESS {key}"
 
 
-    def storeid(self, key, id_):
+    def __storeid(self, key, id_):
         setstate(key, id_)
 
-    def getfileid(self, key):
+    def __getfile(self, key):
         #id_ = getstate(key)
         #if id_:
         #    return id_
         file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}' and trashed=false"}).GetList()
         if (len(file_list) == 1):
-            return file_list[0]['id']
+            return file_list[0]
         elif (len(file_list) == 0):
             return None
         else:
             raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
     
-    def getfolderid(self, path):
+    def __getfolder(self, path):
         path_list = path.split('/')
         current_folder = self.drive.CreateFile({'id': 'root'})
         current_path = ""
