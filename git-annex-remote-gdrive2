@@ -19,9 +19,6 @@ import string
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 
-# redirect all output to stderr
-output = sys.stdout
-sys.stdout = sys.stderr
 
 # Exceptions
 class RequestError(Exception):
@@ -30,7 +27,7 @@ class RequestError(Exception):
 class UnsupportedRequest(RequestError):
     pass
 
-class UnexpectedRequest(RequestError):
+class UnexpectedMessage(RequestError):
     pass
 
 class RemoteReply():
@@ -82,6 +79,11 @@ class WhereisFailure(RemoteReply):
     pass
 
 class SpecialRemote(ABC):
+
+    @abstractmethod
+    def __init__(self, annex):
+        pass
+
     @abstractmethod
     def initremote(self):
         pass
@@ -130,14 +132,15 @@ class SpecialRemote(ABC):
 # The Google class
 class GoogleRemote(SpecialRemote):
 
-    def __init__(self):
+    def __init__(self, annex):
+        self.annex = annex
         # Authentication
         self.gauth = GoogleAuth()
         self.gauth.settings['client_config_backend'] = 'settings'
         self.gauth.settings['client_config'] = {'client_id': '914459249505-ji3d9v92ealsmc4a63ns66uoj9t6mdf0.apps.googleusercontent.com', 'client_secret': 'ivD4Ms4eROu10sHc43ojgX05', 'auth_uri':'https://accounts.google.com/o/oauth2/auth', 'token_uri':'https://accounts.google.com/o/oauth2/token', 'revoke_uri': None, 'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob'}
         
     def initremote(self):
-        self.prefix = getconfig("prefix")
+        self.prefix = self.annex.getconfig("prefix")
 
 
         try:
@@ -158,12 +161,12 @@ class GoogleRemote(SpecialRemote):
             self.root = self.__getfolder(self.prefix)
         except:
             return "INITREMOTE-FAILURE Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive."
-        setconfig("root_id", self.root['id'])
+        self.annex.setconfig("root_id", self.root['id'])
 
         return "INITREMOTE-SUCCESS"
 
     def prepare(self):
-        self.prefix = getconfig("prefix")
+        self.prefix = self.annex.getconfig("prefix")
 
         try:
             self.gauth.LoadCredentialsFile("token.json")
@@ -251,7 +254,7 @@ class GoogleRemote(SpecialRemote):
 
 
     def __storeid(self, key, id_):
-        setstate(key, id_)
+        self.annex.setstate(key, id_)
 
     def __getfile(self, key):
         #id_ = getstate(key)
@@ -301,85 +304,92 @@ class DummyRemote(SpecialRemote):
         print(f"Removing {key}")
 
 class RemoteMaster:
-    pass
+    def __init__(self, output):
+        self.output = output
+        self.__send("VERSION 1")
 
-def getconfig(req):
-    send(f"GETCONFIG {req}")
-    line = sys.stdin.readline().rstrip().split()
-    if line[0] == "VALUE":
-        if len(line) == 2:
-            return line[1]
-        else:
+    def LinkRemote(self, remote):
+        self.remote = remote
+        self.requests = { 
+                     "INITREMOTE": remote.initremote,
+                     "PREPARE": remote.prepare,
+                     "TRANSFER": remote.transfer,
+                     "CHECKPRESENT": remote.checkpresent,
+                     "REMOVE": remote.remove,
+                     "GETCOST": remote.getcost,
+                     "GETAVAILABILITY": remote.getavailability,
+                     "CHECKURL": remote.checkurl,
+                     "WHEREIS": remote.whereis
+                    }
+
+    def Listen(self, input_):
+        self.input = input_
+        for line in self.input:
+            line = line.rstrip()
+            print (f"#Input: {line}")
+            line = line.split()
+            print (f"#request: {line[0]}, params: {line[1:]}")
+            try:
+                if line[0] not in self.requests.keys():
+                    raise UnsupportedRequest()
+                self.__send(self.requests[line[0]](*line[1:]))
+            except (UnsupportedRequest):
+                self.__send ("UNSUPPORTED-REQUEST")
+            except (NotImplementedError):
+                self.__send ("ERROR not yet implemented")
+                raise SystemExit
+            #except Exception as e:
+            #    self.__send (f"ERROR {e}")
+            #    raise SystemExit
+    
+    def __ask(self, request, reply_keyword, reply_count):
+        self.__send(request)
+        line = self.input.readline().rstrip().split()
+        if len(line) == reply_count+1 and line[0] == reply_keyword:
+            return line[1:]
+        elif len(line) == 1 and line[0] == reply_keyword:
             return None
-    else:
-        raise UnexpectedRequest("Expected VALUE")
-
-def setconfig(key, value):
-    # make sure there is no whitespace
-    for s in (key, value):
-        if any([c in s for c in string.whitespace]):
-            raise Exception(f"Cannot set config. {s} contains whitespace")
-    send(f"SETCONFIG {key} {value}")
-
-def getstate(key):
-    send(f"GETSTATE {key}")
-    line = sys.stdin.readline().rstrip().split()
-    if line[0] == "VALUE":
-        if len(line) == 2:
-            return line[1]
         else:
-            return None
-    else:
-        raise UnexpectedRequest("Expected VALUE")
+            raise UnexpectedMessage(f"Expected {reply_keyword} and {reply_count} values")
+    
+    def getconfig(self, req):
+        (reply,) = self.__ask(f"GETCONFIG {req}", "VALUE", 1)
+        return reply
 
-def setstate(key, value):
-    # make sure there is no whitespace
-    for s in (key, value):
-        if any([c in s for c in string.whitespace]):
-            raise Exception(f"Cannot set config. {s} contains whitespace")
-    send(f"SETSTATE {key} {value}")
+    def setconfig(self, key, value):
+        # make sure there is no whitespace
+        for s in (key, value):
+            if any([c in s for c in string.whitespace]):
+                raise ValueError(f"Cannot set config. {s} contains whitespace")
+        self.__send(f"SETCONFIG {key} {value}")
+
+    def getstate(self, key):
+        (reply,) = self.__ask(f"GETSTATE {key}", "VALUE", 1)
+        return reply
+
+    def setstate(self, key, value):
+        # make sure there is no whitespace
+        for s in (key, value):
+            if any([c in s for c in string.whitespace]):
+                raise ValueError(f"Cannot set state. {s} contains whitespace")
+        self.__send(f"SETSTATE {key} {value}")
+
+    def debug(self, *args):
+        self.__send("DEBUG", *args)
 
 
-def send(*args, **kwargs):
-    print(*args, file=output, **kwargs)
-    output.flush()
-
-def debug(*args):
-    send("DEBUG", *args)
+    def __send(self, *args, **kwargs):
+        print(*args, file=self.output, **kwargs)
+        self.output.flush()
 
 def main():
+    # redirect all non-protocoll-output to stderr
+    output = sys.stdout
+    sys.stdout = sys.stderr
 
-    send("VERSION 1")
-
-    remote = GoogleRemote()
-    requests = { "INITREMOTE": remote.initremote,
-                 "PREPARE": remote.prepare,
-                 "TRANSFER": remote.transfer,
-                 "CHECKPRESENT": remote.checkpresent,
-                 "REMOVE": remote.remove,
-                 "GETCOST": remote.getcost,
-                 "GETAVAILABILITY": remote.getavailability,
-                 "CHECKURL": remote.checkurl,
-                 "WHEREIS": remote.whereis }
-
-    for line in sys.stdin:
-        line = line.rstrip()
-        print (f"#Input: {line}")
-        line = line.split()
-        print (f"#request: {line[0]}, params: {line[1:]}")
-        try:
-            if line[0] not in requests.keys():
-                raise UnsupportedRequest()
-            send(requests[line[0]](*line[1:]))
-        except (UnsupportedRequest):
-            send ("UNSUPPORTED-REQUEST")
-        except (NotImplementedError):
-            send ("ERROR not yet implemented")
-            raise SystemExit
-        #except Exception as e:
-        #    send (f"ERROR {e}")
-        #    raise SystemExit
-
+    master = RemoteMaster(output)
+    master.LinkRemote(GoogleRemote(master))
+    master.Listen(sys.stdin)
 
 if __name__ == "__main__":
     main()
