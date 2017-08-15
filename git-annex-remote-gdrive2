@@ -33,6 +33,9 @@ class UnsupportedRequest(RequestError):
 class UnexpectedRequest(RequestError):
     pass
 
+class RemoteReply():
+    pass
+
 class PrepareFailure(RemoteReply):
     pass
 
@@ -106,9 +109,9 @@ class SpecialRemote(ABC):
     # Wrapper for transfer_store and transfer_retrieve
     def transfer(self, method, key, file_):
         if method == "STORE":
-            self.transfer_store(key, file_)
+            return self.transfer_store(key, file_)
         elif method == "RETRIEVE":
-            self.transfer_retrieve(key, file_)
+            return self.transfer_retrieve(key, file_)
    
     # Optional requests
     def getcost(self):
@@ -134,94 +137,98 @@ class GoogleRemote(SpecialRemote):
         self.gauth.settings['client_config'] = {'client_id': '914459249505-ji3d9v92ealsmc4a63ns66uoj9t6mdf0.apps.googleusercontent.com', 'client_secret': 'ivD4Ms4eROu10sHc43ojgX05', 'auth_uri':'https://accounts.google.com/o/oauth2/auth', 'token_uri':'https://accounts.google.com/o/oauth2/token', 'revoke_uri': None, 'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob'}
         
     def initremote(self):
-        self.gauth.LoadCredentialsFile("token.json")
-        
-        if self.gauth.credentials is None:
-            #self.gauth.CommandLineAuth()
-            self.gauth.LocalWebserverAuth()
-        elif self.gauth.access_token_expired:
-            self.gauth.Refresh()
-        else:
-            self.gauth.Authorize()
-        
-        self.gauth.SaveCredentialsFile("token.json")
-        self.drive = GoogleDrive(self.gauth)
-
         self.prefix = getconfig("prefix")
+
+
         try:
+            self.gauth.LoadCredentialsFile("token.json")
+            
+            if self.gauth.credentials is None:
+                #self.gauth.CommandLineAuth()
+                self.gauth.LocalWebserverAuth()
+            elif self.gauth.access_token_expired:
+                self.gauth.Refresh()
+            else:
+                self.gauth.Authorize()
+            
+            self.gauth.SaveCredentialsFile("token.json")
+
+            self.drive = GoogleDrive(self.gauth)
+            
             self.root = self.getfolderid(self.prefix)
         except:
-            raise InitremoteFailure("Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive.")
+            return "INITREMOTE-FAILURE Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive."
         setconfig("root_id", self.root['id'])
 
-        send("INITREMOTE-SUCCESS")
+        return "INITREMOTE-SUCCESS"
 
     def prepare(self):
-        self.gauth.LoadCredentialsFile("token.json")
-        
-        if self.gauth.credentials is None:
-            #self.gauth.CommandLineAuth()
-            self.gauth.LocalWebserverAuth()
-        elif self.gauth.access_token_expired:
-            self.gauth.Refresh()
-        else:
-            self.gauth.Authorize()
-        
-        self.gauth.SaveCredentialsFile("token.json")
-        self.drive = GoogleDrive(self.gauth)
-
         self.prefix = getconfig("prefix")
+
         try:
+            self.gauth.LoadCredentialsFile("token.json")
+            
+            if self.gauth.credentials is None:
+                #self.gauth.CommandLineAuth()
+                self.gauth.LocalWebserverAuth()
+            elif self.gauth.access_token_expired:
+                self.gauth.Refresh()
+            else:
+                self.gauth.Authorize()
+            
+            self.gauth.SaveCredentialsFile("token.json")
+            self.drive = GoogleDrive(self.gauth)
+
             self.root = self.getfolderid(self.prefix)
         except:
-            raise PrepareFailure("Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive.")
+            return "PREPARE-FAILURE Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive."
         if self.root['id'] != getconfig("root_id"):
-            raise PrepareFailure("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
+            return "PREPARE-FAILURE ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote"
 
-        send("PREPARE-SUCCESS")
+        return "PREPARE-SUCCESS"
 
     def transfer_store(self, key, file_):
         try:
             file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}' and trashed=false"}).GetList()
         except:
-            send(f"TRANSFER-FAILURE STORE {key}")
+            return f"TRANSFER-FAILURE STORE {key}"
         else:
             if (len(file_list) == 1):
                 self.storeid(key, file_list[0]['id'])
-                send(f"TRANSFER-SUCCESS STORE {key}")
+                return f"TRANSFER-SUCCESS STORE {key}"
             elif (len(file_list) == 0):
                 newfile = self.drive.CreateFile({'title': key, 'parents': [{'kind': 'drive#parentReference', 'id': self.root['id']}] })
                 newfile.SetContentFile(file_)
                 try:
                     newfile.Upload()
                 except:
-                    send(f"TRANSFER-FAILURE STORE {key}")
+                    return f"TRANSFER-FAILURE STORE {key}"
                 else:
                     self.storeid(key, newfile['id'])
-                    send(f"TRANSFER-SUCCESS STORE {key}")
+                    return f"TRANSFER-SUCCESS STORE {key}"
             else:
                 raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
     
     def transfer_retrieve(self, key, file_):
-        newfile = self.drive.CreateFile({'id': self.getfileid(key)})
         try:
+            newfile = self.drive.CreateFile({'id': self.getfileid(key)})
             newfile.GetContentFile(file_)
         except:
-            send(f"TRANSFER-FAILURE RETRIEVE {key}")
+            return f"TRANSFER-FAILURE RETRIEVE {key}"
         else:
-            send(f"TRANSFER-SUCCESS RETRIEVE {key}")
+            return f"TRANSFER-SUCCESS RETRIEVE {key}"
     
     def checkpresent(self, key):
         try:
             file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}' and trashed=false"}).GetList()
         except:
-            send(f"CHECKPRESENT-UNKNOWN {key}")
+            return f"CHECKPRESENT-UNKNOWN {key}"
         else:
             if (len(file_list) == 1):
                 self.storeid(key, file_list[0]['id'])
-                send(f"CHECKPRESENT-SUCCESS {key}")
+                return f"CHECKPRESENT-SUCCESS {key}"
             elif (len(file_list) == 0):
-                send(f"CHECKPRESENT-FAILURE {key}")
+                return f"CHECKPRESENT-FAILURE {key}"
             else:
                 raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
 
@@ -229,18 +236,18 @@ class GoogleRemote(SpecialRemote):
         try:
             file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}'"}).GetList()
         except:
-            send(f"REMOVE-FAILURE {key}")
+            return f"REMOVE-FAILURE {key}"
         else:
             if (len(file_list) == 0):
-                send(f"REMOVE-SUCCESS {key}")
+                return f"REMOVE-SUCCESS {key}"
             else:
                 try:
                     for file_ in file_list:
                         file_.Delete()
                 except:
-                    send(f"REMOVE-FAILURE {key}")
+                    return f"REMOVE-FAILURE {key}"
                 else:
-                    send(f"REMOVE-SUCCESS {key}")
+                    return f"REMOVE-SUCCESS {key}"
 
 
     def storeid(self, key, id_):
@@ -363,7 +370,7 @@ def main():
         try:
             if line[0] not in requests.keys():
                 raise UnsupportedRequest()
-            requests[line[0]](*line[1:])
+            send(requests[line[0]](*line[1:]))
         except (UnsupportedRequest):
             send ("UNSUPPORTED-REQUEST")
         except (NotImplementedError):
