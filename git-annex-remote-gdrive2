@@ -306,7 +306,6 @@ class DummyRemote(SpecialRemote):
 class RemoteMaster:
     def __init__(self, output):
         self.output = output
-        self.__send("VERSION 1")
 
     def LinkRemote(self, remote):
         self.remote = remote
@@ -324,6 +323,7 @@ class RemoteMaster:
 
     def Listen(self, input_):
         self.input = input_
+        self.__send("VERSION 1")
         for line in self.input:
             line = line.rstrip()
             print (f"#Input: {line}")
