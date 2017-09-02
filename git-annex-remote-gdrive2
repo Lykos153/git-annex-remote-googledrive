@@ -185,7 +185,7 @@ class GoogleRemote(SpecialRemote):
             self.root = self.__getfolder(self.prefix)
         except:
             return "PREPARE-FAILURE Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive."
-        if self.root['id'] != getconfig("root_id"):
+        if self.root['id'] != self.annex.getconfig("root_id"):
             return "PREPARE-FAILURE ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote"
 
         return "PREPARE-SUCCESS"
