@@ -326,9 +326,7 @@ class RemoteMaster:
         self.__send("VERSION 1")
         for line in self.input:
             line = line.rstrip()
-            print (f"#Input: {line}")
             line = line.split()
-            print (f"#request: {line[0]}, params: {line[1:]}")
             try:
                 if line[0] not in self.requests.keys():
                     raise UnsupportedRequest()
