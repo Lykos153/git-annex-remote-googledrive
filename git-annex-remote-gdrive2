@@ -355,16 +355,15 @@ class RemoteMaster:
                 self.__send ("ERROR not yet implemented")
                 raise SystemExit
             #except Exception as e:
-            #    self.__send (f"ERROR {e}")
+            #    self.__send ("ERROR", e)
             #    raise SystemExit
     
     def __ask(self, request, reply_keyword, reply_count):
         self.__send(request)
-        line = self.input.readline().rstrip().split()
-        if len(line) == reply_count+1 and line[0] == reply_keyword:
+        line = self.input.readline().rstrip().split(maxsplit=reply_count)
+        if line and line[0] == reply_keyword:
+            line.extend([""] * (reply_count+1-len(line)))
             return line[1:]
-        elif len(line) == 1 and line[0] == reply_keyword:
-            return None
         else:
             raise UnexpectedMessage(f"Expected {reply_keyword} and {reply_count} values")
 
@@ -372,6 +371,8 @@ class RemoteMaster:
         self.__send(request)
         reply = []
         for line in self.input:
+            line = line.rstrip()
+            line = line.split(maxsplit=1)
             if len(line) == 2 and line[0] == "VALUE":
                  reply.append(line[1])
             elif len(line) == 1 and line[0] == "VALUE":
