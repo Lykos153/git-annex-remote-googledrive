@@ -13,11 +13,14 @@
 #
 
 from abc import ABC, abstractmethod
+
+import os
 import sys
 import string
 
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
+from oauth2client.client import OAuth2Credentials
 
 
 # Exceptions
@@ -160,52 +163,56 @@ class GoogleRemote(SpecialRemote):
     def initremote(self):
         self.prefix = self.annex.getconfig("prefix")
 
+        token_file = self.annex.getconfig("token") or "token.json"
+        self.gauth.LoadCredentialsFile(token_file)
 
+        if self.gauth.credentials is None:
+            credentials = self.annex.getcreds("credentials")["user"]
+            if credentials:
+                self.gauth.credentials = OAuth2Credentials.from_json(credentials)
+            #else:
+            #    self.gauth.LocalWebserverAuth()
+        
         try:
-            self.gauth.LoadCredentialsFile("token.json")
-            
-            if self.gauth.credentials is None:
-                #self.gauth.CommandLineAuth()
-                self.gauth.LocalWebserverAuth()
-            elif self.gauth.access_token_expired:
+            if self.gauth.access_token_expired:
                 self.gauth.Refresh()
             else:
                 self.gauth.Authorize()
-            
-            self.gauth.SaveCredentialsFile("token.json")
-
-            self.drive = GoogleDrive(self.gauth)
-            
-            self.root = self.__getfolder(self.prefix)
+                self.drive = GoogleDrive(self.gauth)
+                self.root = self.__getfolder(self.prefix)
         except:
-            return "INITREMOTE-FAILURE Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive."
+            return "INITREMOTE-FAILURE Failed to create directory on remote. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-gdrive setup'."
         self.annex.setconfig("root_id", self.root['id'])
+        credentials = ''.join(self.gauth.credentials.to_json().split())
+        self.annex.setcreds("credentials", credentials, "")
+        
+        try:
+            os.remove(token_file)
+        except:
+            pass
 
         return "INITREMOTE-SUCCESS"
 
     def prepare(self):
         self.prefix = self.annex.getconfig("prefix")
+        credentials = self.annex.getcreds("credentials")["user"]
 
         try:
-            self.gauth.LoadCredentialsFile("token.json")
-            
-            if self.gauth.credentials is None:
-                #self.gauth.CommandLineAuth()
-                self.gauth.LocalWebserverAuth()
-            elif self.gauth.access_token_expired:
+            self.gauth.credentials = OAuth2Credentials.from_json(credentials)
+            if self.gauth.access_token_expired:
                 self.gauth.Refresh()
             else:
                 self.gauth.Authorize()
             
-            self.gauth.SaveCredentialsFile("token.json")
             self.drive = GoogleDrive(self.gauth)
-
             self.root = self.__getfolder(self.prefix)
         except:
             return "PREPARE-FAILURE Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive."
         if self.root['id'] != self.annex.getconfig("root_id"):
             return "PREPARE-FAILURE ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote"
 
+        credentials = ''.join(self.gauth.credentials.to_json().split())
+        self.annex.setcreds("credentials", credentials, "")
         return "PREPARE-SUCCESS"
 
     def transfer_store(self, key, file_):
