@@ -419,7 +419,7 @@ class RemoteMaster:
         return self.__askvalue(f"DIRHASH-LOWER {key}")
 
     def setcreds(self, setting, user, password):
-        self.__send(setting, user, password)
+        self.__send("SETCREDS", setting, user, password)
 
     def getcreds(self, setting):
         (user, password) = self.__ask(f"GETCREDS {setting}", "CREDS", 2)
