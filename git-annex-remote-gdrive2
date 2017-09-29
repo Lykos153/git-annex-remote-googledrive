@@ -22,6 +22,7 @@ from pydrive.drive import GoogleDrive
 from oauth2client.client import OAuth2Credentials
 
 import AnnexRemote
+from AnnexRemote import Reply
 
 # The Google class
 class GoogleRemote(AnnexRemote.SpecialRemote):
@@ -68,18 +69,18 @@ class GoogleRemote(AnnexRemote.SpecialRemote):
             self.drive = GoogleDrive(self.gauth)
             self.root = self.__getfolder(self.prefix)
         except:
-            return "INITREMOTE-FAILURE Failed to create directory on remote. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-gdrive setup'."
+            return Reply.InitremoteFailure("Failed to create directory on remote. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-gdrive setup'.")
 
         self.annex.setconfig("root_id", self.root['id'])
         credentials = ''.join(self.gauth.credentials.to_json().split())
         self.annex.setcreds("credentials", credentials, "")
         
-        try:
-            os.remove(token_file)
-        except:
-            pass
+        #try:
+        #    os.remove(token_file)
+        #except:
+        #    pass
 
-        return "INITREMOTE-SUCCESS"
+        return Reply.InitremoteSuccess()
 
     def prepare(self):
         self.prefix = self.annex.getconfig("prefix")
@@ -95,33 +96,33 @@ class GoogleRemote(AnnexRemote.SpecialRemote):
             self.drive = GoogleDrive(self.gauth)
             self.root = self.__getfolder(self.prefix)
         except:
-            return "PREPARE-FAILURE Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive."
+            return Reply.PrepareFailure("Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive.")
         if self.root['id'] != self.annex.getconfig("root_id"):
-            return "PREPARE-FAILURE ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote"
+            return Reply.PrepareFailure("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
 
         credentials = ''.join(self.gauth.credentials.to_json().split())
         self.annex.setcreds("credentials", credentials, "")
-        return "PREPARE-SUCCESS"
+        return Reply.PrepareSuccess()
 
     def transfer_store(self, key, file_):
         try:
             file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}' and trashed=false"}).GetList()
         except:
-            return f"TRANSFER-FAILURE STORE {key}"
+            return Reply.TransferFailure_Store(key)
         else:
             if (len(file_list) == 1):
                 self.__storeid(key, file_list[0]['id'])
-                return f"TRANSFER-SUCCESS STORE {key}"
+                return Reply.TransferSuccess_Store(key)
             elif (len(file_list) == 0):
                 newfile = self.drive.CreateFile({'title': key, 'parents': [{'kind': 'drive#parentReference', 'id': self.root['id']}] })
                 newfile.SetContentFile(file_)
                 try:
                     newfile.Upload()
                 except:
-                    return f"TRANSFER-FAILURE STORE {key}"
+                    return Reply.TransferFailure_Store(key)
                 else:
                     self.__storeid(key, newfile['id'])
-                    return f"TRANSFER-SUCCESS STORE {key}"
+                    return Reply.TransferSuccess_Store(key)
             else:
                 raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
     
@@ -130,21 +131,21 @@ class GoogleRemote(AnnexRemote.SpecialRemote):
             newfile = self.__getfile(key)
             newfile.GetContentFile(file_)
         except:
-            return f"TRANSFER-FAILURE RETRIEVE {key}"
+            return Reply.TransferFailure_Retrieve(key)
         else:
-            return f"TRANSFER-SUCCESS RETRIEVE {key}"
+            return Reply.TransferSuccess_Retrieve(key)
     
     def checkpresent(self, key):
         try:
             file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}' and trashed=false"}).GetList()
         except:
-            return f"CHECKPRESENT-UNKNOWN {key}"
+            return Reply.CheckpresentUnknown(key)
         else:
             if (len(file_list) == 1):
                 self.__storeid(key, file_list[0]['id'])
-                return f"CHECKPRESENT-SUCCESS {key}"
+                return Reply.CheckpresentSuccess(key)
             elif (len(file_list) == 0):
-                return f"CHECKPRESENT-FAILURE {key}"
+                return Reply.CheckpresentFailure(key)
             else:
                 raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
 
@@ -152,18 +153,18 @@ class GoogleRemote(AnnexRemote.SpecialRemote):
         try:
             file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}'"}).GetList()
         except:
-            return f"REMOVE-FAILURE {key}"
+            return Reply.RemoveFailure(key)
         else:
             if (len(file_list) == 0):
-                return f"REMOVE-SUCCESS {key}"
+                return Reply.RemoveSuccess(key)
             else:
                 try:
                     for file_ in file_list:
                         file_.Delete()
                 except:
-                    return f"REMOVE-FAILURE {key}"
+                    return Reply.RemoveFailure(key)
                 else:
-                    return f"REMOVE-SUCCESS {key}"
+                    return Reply.RemoveSuccess(key)
 
 
     def __storeid(self, key, id_):
