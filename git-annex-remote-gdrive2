@@ -125,6 +125,9 @@ class SpecialRemote(ABC):
     def getavailability(self):
         raise UnsupportedRequest()
 
+    def claimurl(self, url):
+        raise UnsupportedRequest()
+
     def checkurl(self):
         raise UnsupportedRequest()
 
