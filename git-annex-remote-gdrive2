@@ -105,26 +105,25 @@ class GoogleRemote(AnnexRemote.SpecialRemote):
         return Reply.PrepareSuccess()
 
     def transfer_store(self, key, file_):
-        try:
-            file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}' and trashed=false"}).GetList()
-        except:
+        if self.lastcheckpresent and self.lastcheckpresent.key == key:
+            checkpresent_result = self.lastcheckpresent
+        else:
+            checkpresent_result = self.checkpresent(key)
+
+        if isinstance(checkpresent_result, Reply.CheckpresentSuccess):
+            return Reply.TransferSuccess_Store(key)
+        elif isinstance(checkpresent_result, Reply.CheckpresentUnknown):
             return Reply.TransferFailure_Store(key)
         else:
-            if (len(file_list) == 1):
-                self.__storeid(key, file_list[0]['id'])
-                return Reply.TransferSuccess_Store(key)
-            elif (len(file_list) == 0):
-                newfile = self.drive.CreateFile({'title': key, 'parents': [{'kind': 'drive#parentReference', 'id': self.root['id']}] })
-                newfile.SetContentFile(file_)
-                try:
-                    newfile.Upload()
-                except:
-                    return Reply.TransferFailure_Store(key)
-                else:
-                    self.__storeid(key, newfile['id'])
-                    return Reply.TransferSuccess_Store(key)
+            newfile = self.drive.CreateFile({'title': key, 'parents': [{'kind': 'drive#parentReference', 'id': self.root['id']}] })
+            newfile.SetContentFile(file_)
+            try:
+                newfile.Upload()
+            except:
+                return Reply.TransferFailure_Store(key)
             else:
-                raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
+                self.__storeid(key, newfile['id'])
+                return Reply.TransferSuccess_Store(key)
     
     def transfer_retrieve(self, key, file_):
         try:
@@ -139,13 +138,16 @@ class GoogleRemote(AnnexRemote.SpecialRemote):
         try:
             file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}' and trashed=false"}).GetList()
         except:
-            return Reply.CheckpresentUnknown(key)
+            self.lastcheckpresent = Reply.CheckpresentUnknown(key)
+            return self.lastcheckpresent
         else:
             if (len(file_list) == 1):
                 self.__storeid(key, file_list[0]['id'])
-                return Reply.CheckpresentSuccess(key)
+                self.lastcheckpresent = Reply.CheckpresentSuccess(key)
+                return self.lastcheckpresent
             elif (len(file_list) == 0):
-                return Reply.CheckpresentFailure(key)
+                self.lastcheckpresent = Reply.CheckpresentFailure(key)
+                return self.lastcheckpresent
             else:
                 raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
 
