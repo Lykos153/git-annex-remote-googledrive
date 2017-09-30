@@ -25,10 +25,12 @@ import AnnexRemote
 from AnnexRemote import Reply
 
 # The Google class
-class GoogleRemote(AnnexRemote.SpecialRemote):
+class GoogleRemote(AnnexRemote.ExportRemote):
 
     def __init__(self, annex):
         self.annex = annex
+        self.exporting = dict()
+        self.lastcheckpresent = None
         # Authentication
         self.gauth = GoogleAuth()
         self.gauth.settings['client_config_backend'] = 'settings'
@@ -168,15 +170,88 @@ class GoogleRemote(AnnexRemote.SpecialRemote):
                 else:
                     return Reply.RemoveSuccess(key)
 
+    # export methods
+    def export(self, name):
+        splitpath = name.rsplit('/',1)
+        if len(splitpath) == 2:
+            self.exporting['path'] = splitpath[0]
+            self.exporting['filename'] = splitpath[1]
+            self.exporting['parent'] = self.__getfolder(self.exporting['path'], root=self.root)
+        else:
+            self.exporting['path'] = ''
+            self.exporting['filename'] = splitpath[0]
+            self.exporting['parent'] = self.root
 
+
+    def transferexport_store(self, key, file_):
+        if self.lastcheckpresent and self.lastcheckpresent.key == key:
+            checkpresent_result = self.lastcheckpresent
+        else:
+            checkpresent_result = self.checkpresentexport(key)
+
+        if isinstance(checkpresent_result, Reply.CheckpresentSuccess):
+            return Reply.TransferSuccess_Store(key)
+        elif isinstance(checkpresent_result, Reply.CheckpresentUnknown):
+            return Reply.TransferFailure_Store(key)
+        else:
+            newfile = self.drive.CreateFile({'title': self.exporting['filename'], 'parents': [{'kind': 'drive#parentReference', 'id': self.exporting['parent']['id']}] })
+            newfile.SetContentFile(file_)
+            try:
+                newfile.Upload()
+            except:
+                return Reply.TransferFailure_Store(key)
+            else:
+                self.__storeid(key, newfile['id'])
+                return Reply.TransferSuccess_Store(key)
+
+    def transferexport_retrieve(self, key, file_):
+        try:
+            newfile = self.__getfile(self.exporting['filename'], parent=self.exporting['parent'])
+            newfile.GetContentFile(file_)
+        except:
+            return Reply.TransferFailure_Retrieve(key)
+        else:
+            return Reply.TransferSuccess_Retrieve(key)
+            
+    def checkpresentexport(self, key):
+        try:
+            file_list = self.drive.ListFile({'q': f"'{self.exporting['parent']['id']}' in parents and title='{self.exporting['filename']}' and trashed=false"}).GetList()
+        except:
+            self.lastcheckpresent = Reply.CheckpresentUnknown(key)
+            return self.lastcheckpresent
+        else:
+            if (len(file_list) == 1):
+                self.__storeid(key, file_list[0]['id'])
+                self.lastcheckpresent = Reply.CheckpresentSuccess(key)
+                return self.lastcheckpresent
+            elif (len(file_list) == 0):
+                self.lastcheckpresent = Reply.CheckpresentFailure(key)
+                return self.lastcheckpresent
+            else:
+                raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
+
+    def removeexport(self, key):
+        raise NotImplementedError()
+
+    def removeexportdirectory(self, directory):
+        raise NotImplementedError()
+
+    def renameexport(self, key, new_name):
+        raise NotImplementedError()
+ 
+
+
+    # internal methods
     def __storeid(self, key, id_):
         self.annex.setstate(key, id_)
 
-    def __getfile(self, key):
+    def __getfile(self, filename, parent=None):
         #id_ = getstate(key)
         #if id_:
         #    return id_
-        file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}' and trashed=false"}).GetList()
+        if not parent:
+            parent = self.root
+        file_list = self.drive.ListFile({'q': f"'{parent['id']}' in parents and title='{filename}' and trashed=false"}).GetList()
         if (len(file_list) == 1):
             return file_list[0]
         elif (len(file_list) == 0):
@@ -184,10 +259,15 @@ class GoogleRemote(AnnexRemote.SpecialRemote):
         else:
             raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
     
-    def __getfolder(self, path):
+    def __getfolder(self, path, root=None):
         path_list = path.split('/')
-        current_folder = self.drive.CreateFile({'id': 'root'})
-        current_path = ""
+        if root:
+            current_folder = root
+            current_path = self.prefix
+        else:
+            current_folder = self.drive.CreateFile({'id': 'root'})
+            current_path = ""
+
         for folder in path_list:
             current_path = "/".join([current_path, folder])
             file_list = self.drive.ListFile({'q': f"'{current_folder['id']}' in parents and title='{folder}' and trashed=false"}).GetList()
