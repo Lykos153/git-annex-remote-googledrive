@@ -224,10 +224,25 @@ class GoogleRemote(AnnexRemote.ExportRemote):
                 raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
 
     def removeexport(self, key):
-        raise NotImplementedError()
+        try:
+            file_list = self.drive.ListFile({'q': f"'{self.exporting['parent']['id']}' in parents and title='{self.exporting['filename']}' and mimeType!='application/vnd.google-apps.folder'"}).GetList()
+            for file_ in file_list:
+                file_.Delete()
+        except:
+            return Reply.RemoveFailure(key)
+        else:
+            return Reply.RemoveSuccess(key)
 
     def removeexportdirectory(self, directory):
-        raise NotImplementedError()
+        self.export(directory)
+        try:
+            file_list = self.drive.ListFile({'q': f"'{self.exporting['parent']['id']}' in parents and title='{self.exporting['filename']}' and mimeType='application/vnd.google-apps.folder'"}).GetList()
+            for file_ in file_list:
+                file_.Delete()
+        except:
+            return Reply.RemoveexportdirectoryFailure()
+        else:
+            return Reply.RemoveexportdirectorySuccess()
 
     def renameexport(self, key, new_name):
         raise NotImplementedError()
