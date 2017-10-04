@@ -156,19 +156,12 @@ class GoogleRemote(AnnexRemote.ExportRemote):
     def remove(self, key):
         try:
             file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}'"}).GetList()
+            for file_ in file_list:
+                file_.Delete()
         except:
             return Reply.RemoveFailure(key)
         else:
-            if (len(file_list) == 0):
-                return Reply.RemoveSuccess(key)
-            else:
-                try:
-                    for file_ in file_list:
-                        file_.Delete()
-                except:
-                    return Reply.RemoveFailure(key)
-                else:
-                    return Reply.RemoveSuccess(key)
+            return Reply.RemoveSuccess(key)
 
     # export methods
     def export(self, name):
