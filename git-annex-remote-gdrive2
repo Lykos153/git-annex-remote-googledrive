@@ -165,16 +165,7 @@ class GoogleRemote(AnnexRemote.ExportRemote):
 
     # export methods
     def export(self, name):
-        splitpath = name.rsplit('/',1)
-        if len(splitpath) == 2:
-            self.exporting['path'] = splitpath[0]
-            self.exporting['filename'] = splitpath[1]
-            self.exporting['parent'] = self.__getfolder(self.exporting['path'], root=self.root)
-        else:
-            self.exporting['path'] = ''
-            self.exporting['filename'] = splitpath[0]
-            self.exporting['parent'] = self.root
-
+        self.exporting = self.__getexportfile(name)
 
     def transferexport_store(self, key, file_):
         if self.lastcheckpresent and self.lastcheckpresent.key == key:
@@ -234,9 +225,9 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             return Reply.RemoveSuccess(key)
 
     def removeexportdirectory(self, directory):
-        self.export(directory)
+        exportfile = self.__getexportfile(directory)
         try:
-            file_list = self.drive.ListFile({'q': f"'{self.exporting['parent']['id']}' in parents and title='{self.exporting['filename']}' and mimeType='application/vnd.google-apps.folder'"}).GetList()
+            file_list = self.drive.ListFile({'q': f"'{exportfile['parent']['id']}' in parents and title='{exportfile['filename']}' and mimeType='application/vnd.google-apps.folder'"}).GetList()
             for file_ in file_list:
                 file_.Delete()
         except:
@@ -287,6 +278,20 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             else:
                 raise self.AmbiguousFilenameException (f"There are two or more folders named {current_path}")
         return current_folder
+
+    def __getexportfile(self, filename):
+        splitpath = filename.rsplit('/',1)
+        exportfile = dict()
+        if len(splitpath) == 2:
+            exportfile['path'] = splitpath[0]
+            exportfile['filename'] = splitpath[1]
+            exportfile['parent'] = self.__getfolder(exportfile['path'], root=self.root)
+        else:
+            exportfile['path'] = ''
+            exportfile['filename'] = splitpath[0]
+            exportfile['parent'] = self.root
+        return exportfile
+
 
     class FileNotFoundException(Exception):
         pass
