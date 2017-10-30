@@ -236,9 +236,18 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             return Reply.RemoveexportdirectorySuccess()
 
     def renameexport(self, key, new_name):
-        raise NotImplementedError()
- 
-
+        newfileinfo = self.__getexportfile(new_name)
+        try:
+            file_ = self.__getfile(self.exporting['filename'], parent=self.exporting['parent'])
+            if self.exporting['path'] != newfileinfo['path']:
+                file_['parents'] = [{'kind': 'drive#parentReference', 'id': newfileinfo['parent']['id']}]
+            if self.exporting['filename'] != newfileinfo['filename']:
+                file_['title'] = newfileinfo['filename']
+            file_.Upload()
+        except:
+            return Reply.RenameexportFailure(key)
+        else:
+            return Reply.RenameexportSuccess(key)
 
     # internal methods
     def __storeid(self, key, id_):
