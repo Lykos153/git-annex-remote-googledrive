@@ -138,25 +138,22 @@ class GoogleRemote(AnnexRemote.ExportRemote):
     
     def checkpresent(self, key):
         try:
-            file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}' and trashed=false"}).GetList()
+            file_ = self.__getfile(key)
         except:
             self.lastcheckpresent = Reply.CheckpresentUnknown(key)
             return self.lastcheckpresent
         else:
-            if (len(file_list) == 1):
-                #self.__storeid(key, file_list[0]['id'])
+            if file_:
                 self.lastcheckpresent = Reply.CheckpresentSuccess(key)
                 return self.lastcheckpresent
-            elif (len(file_list) == 0):
+            else:
                 self.lastcheckpresent = Reply.CheckpresentFailure(key)
                 return self.lastcheckpresent
-            else:
-                raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
 
     def remove(self, key):
         try:
-            file_list = self.drive.ListFile({'q': f"'{self.root['id']}' in parents and title='{key}'"}).GetList()
-            for file_ in file_list:
+            file_ = self.__getfile(key)
+            if file_:
                 file_.Delete()
         except:
             return Reply.RemoveFailure(key)
@@ -165,7 +162,7 @@ class GoogleRemote(AnnexRemote.ExportRemote):
 
     # export methods
     def export(self, name):
-        self.exporting = self.__getexportfile(name)
+        self.exporting = self.__splitpath(name)
 
     def transferexport_store(self, key, file_):
         if self.lastcheckpresent and self.lastcheckpresent.key == key:
@@ -198,26 +195,32 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             return Reply.TransferSuccess_Retrieve(key)
             
     def checkpresentexport(self, key):
+        parent = self.__getfolder(self.exporting['path'], root=self.root, create=False)
+        if not parent:
+            self.lastcheckpresent = Reply.CheckpresentFailure(key)
+            return self.lastcheckpresent
+
         try:
-            file_list = self.drive.ListFile({'q': f"'{self.exporting['parent']['id']}' in parents and title='{self.exporting['filename']}' and trashed=false"}).GetList()
+            file_ = self.__getfile(self.exporting['filename'], parent=parent)
         except:
             self.lastcheckpresent = Reply.CheckpresentUnknown(key)
             return self.lastcheckpresent
         else:
-            if (len(file_list) == 1):
-                #self.__storeid(key, file_list[0]['id'])
+            if file_:
                 self.lastcheckpresent = Reply.CheckpresentSuccess(key)
                 return self.lastcheckpresent
-            elif (len(file_list) == 0):
+            else:
                 self.lastcheckpresent = Reply.CheckpresentFailure(key)
                 return self.lastcheckpresent
-            else:
-                raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
 
     def removeexport(self, key):
+        parent = self.__getfolder(self.exporting['path'], root=self.root, create=False)
+        if not parent:
+            return Reply.RemoveSuccess(key)
+
         try:
-            file_list = self.drive.ListFile({'q': f"'{self.exporting['parent']['id']}' in parents and title='{self.exporting['filename']}' and mimeType!='application/vnd.google-apps.folder'"}).GetList()
-            for file_ in file_list:
+            file_ = self.__getfile(self.exporting['filename'], parent=parent)
+            if file_:
                 file_.Delete()
         except:
             return Reply.RemoveFailure(key)
@@ -225,10 +228,9 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             return Reply.RemoveSuccess(key)
 
     def removeexportdirectory(self, directory):
-        exportfile = self.__getexportfile(directory)
         try:
-            file_list = self.drive.ListFile({'q': f"'{exportfile['parent']['id']}' in parents and title='{exportfile['filename']}' and mimeType='application/vnd.google-apps.folder'"}).GetList()
-            for file_ in file_list:
+            file_ = self.__getfolder(directory, root=self.root, create=False)
+            if file_:
                 file_.Delete()
         except:
             return Reply.RemoveexportdirectoryFailure()
@@ -236,11 +238,13 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             return Reply.RemoveexportdirectorySuccess()
 
     def renameexport(self, key, new_name):
-        newfileinfo = self.__getexportfile(new_name)
+        newfileinfo = self.__splitpath(new_name)
+        oldparent = self.__getfolder(self.exporting['path'], root=self.root, create=False)
+        newparent = self.__getfolder(newfileinfo['path'], root=self.root, create=True)
         try:
-            file_ = self.__getfile(self.exporting['filename'], parent=self.exporting['parent'])
+            file_ = self.__getfile(self.exporting['filename'], parent=oldparent)
             if self.exporting['path'] != newfileinfo['path']:
-                file_['parents'] = [{'kind': 'drive#parentReference', 'id': newfileinfo['parent']['id']}]
+                file_['parents'] = [{'kind': 'drive#parentReference', 'id': newparent['id']}]
             if self.exporting['filename'] != newfileinfo['filename']:
                 file_['title'] = newfileinfo['filename']
             file_.Upload()
@@ -292,13 +296,12 @@ class GoogleRemote(AnnexRemote.ExportRemote):
                 raise self.AmbiguousFilenameException (f"There are two or more folders named {current_path}")
         return current_folder
 
-    def __getexportfile(self, filename):
+    def __splitpath(self, filename):
         splitpath = filename.rsplit('/',1)
         exportfile = dict()
         if len(splitpath) == 2:
             exportfile['path'] = splitpath[0]
             exportfile['filename'] = splitpath[1]
-            exportfile['parent'] = self.__getfolder(exportfile['path'], root=self.root)
         else:
             exportfile['path'] = ''
             exportfile['filename'] = splitpath[0]
