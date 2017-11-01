@@ -124,7 +124,7 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             except:
                 return Reply.TransferFailure_Store(key)
             else:
-                self.__storeid(key, newfile['id'])
+                #self.__storeid(key, newfile['id'])
                 return Reply.TransferSuccess_Store(key)
     
     def transfer_retrieve(self, key, file_):
@@ -144,7 +144,7 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             return self.lastcheckpresent
         else:
             if (len(file_list) == 1):
-                self.__storeid(key, file_list[0]['id'])
+                #self.__storeid(key, file_list[0]['id'])
                 self.lastcheckpresent = Reply.CheckpresentSuccess(key)
                 return self.lastcheckpresent
             elif (len(file_list) == 0):
@@ -185,7 +185,7 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             except:
                 return Reply.TransferFailure_Store(key)
             else:
-                self.__storeid(key, newfile['id'])
+                #self.__storeid(key, newfile['id'])
                 return Reply.TransferSuccess_Store(key)
 
     def transferexport_retrieve(self, key, file_):
@@ -205,7 +205,7 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             return self.lastcheckpresent
         else:
             if (len(file_list) == 1):
-                self.__storeid(key, file_list[0]['id'])
+                #self.__storeid(key, file_list[0]['id'])
                 self.lastcheckpresent = Reply.CheckpresentSuccess(key)
                 return self.lastcheckpresent
             elif (len(file_list) == 0):
@@ -250,8 +250,8 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             return Reply.RenameexportSuccess(key)
 
     # internal methods
-    def __storeid(self, key, id_):
-        self.annex.setstate(key, id_)
+    #def __storeid(self, key, id_):
+    #    self.annex.setstate(key, id_)
 
     def __getfile(self, filename, parent=None):
         #id_ = getstate(key)
