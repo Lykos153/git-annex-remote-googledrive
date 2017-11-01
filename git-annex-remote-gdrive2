@@ -267,8 +267,9 @@ class GoogleRemote(AnnexRemote.ExportRemote):
         else:
             raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
     
-    def __getfolder(self, path, root=None):
+    def __getfolder(self, path, root=None, create=True):
         path_list = path.split('/')
+        path_list = list(filter(None, path_list))
         if root:
             current_folder = root
             current_path = self.prefix
@@ -282,8 +283,11 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             if (len(file_list) == 1):
                 current_folder = file_list[0]
             elif (len(file_list) == 0):
-                current_folder = self.drive.CreateFile({'title': folder, 'parents': [{'kind': 'drive#parentReference', 'id': current_folder['id']}], 'mimeType': "application/vnd.google-apps.folder"})
-                current_folder.Upload()
+                if(create):
+                    current_folder = self.drive.CreateFile({'title': folder, 'parents': [{'kind': 'drive#parentReference', 'id': current_folder['id']}], 'mimeType': "application/vnd.google-apps.folder"})
+                    current_folder.Upload()
+                else:
+                    return None
             else:
                 raise self.AmbiguousFilenameException (f"There are two or more folders named {current_path}")
         return current_folder
