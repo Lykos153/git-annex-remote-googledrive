@@ -21,16 +21,16 @@ from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 from oauth2client.client import OAuth2Credentials
 
-import AnnexRemote
-from AnnexRemote import Reply
+from AnnexRemote import Master
+from AnnexRemote import ExportRemote
+from AnnexRemote import RemoteError
 
 # The Google class
-class GoogleRemote(AnnexRemote.ExportRemote):
+class GoogleRemote(ExportRemote):
 
     def __init__(self, annex):
-        self.annex = annex
-        self.exporting = dict()
-        self.lastcheckpresent = None
+        super().__init__(annex)
+        self.presence_cache = dict()
         # Authentication
         self.gauth = GoogleAuth()
         self.gauth.settings['client_config_backend'] = 'settings'
@@ -60,8 +60,6 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             credentials = self.annex.getcreds("credentials")["user"]
             if credentials:
                 self.gauth.credentials = OAuth2Credentials.from_json(credentials)
-            #else:
-            #    self.gauth.LocalWebserverAuth()
         
         try:
             if self.gauth.access_token_expired:
@@ -71,18 +69,11 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             self.drive = GoogleDrive(self.gauth)
             self.root = self.__getfolder(self.prefix)
         except:
-            return Reply.InitremoteFailure("Failed to create directory on remote. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-gdrive setup'.")
+            raise RemoteError("Failed to create directory on remote. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-gdrive setup'.")
 
         self.annex.setconfig("root_id", self.root['id'])
         credentials = ''.join(self.gauth.credentials.to_json().split())
         self.annex.setcreds("credentials", credentials, "")
-        
-        #try:
-        #    os.remove(token_file)
-        #except:
-        #    pass
-
-        return Reply.InitremoteSuccess()
 
     def prepare(self):
         self.prefix = self.annex.getconfig("prefix")
@@ -98,57 +89,44 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             self.drive = GoogleDrive(self.gauth)
             self.root = self.__getfolder(self.prefix)
         except:
-            return Reply.PrepareFailure("Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive.")
+            raise RemoteError("Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive.")
         if self.root['id'] != self.annex.getconfig("root_id"):
-            return Reply.PrepareFailure("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
+            raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
 
         credentials = ''.join(self.gauth.credentials.to_json().split())
         self.annex.setcreds("credentials", credentials, "")
-        return Reply.PrepareSuccess()
 
     def transfer_store(self, key, file_):
-        if self.lastcheckpresent and self.lastcheckpresent.key == key:
-            checkpresent_result = self.lastcheckpresent
-        else:
-            checkpresent_result = self.checkpresent(key)
-
-        if isinstance(checkpresent_result, Reply.CheckpresentSuccess):
-            return Reply.TransferSuccess_Store(key)
-        elif isinstance(checkpresent_result, Reply.CheckpresentUnknown):
-            return Reply.TransferFailure_Store(key)
-        else:
+        if key not in self.presence_cache:
+            self.checkpresent(key)
+        if not self.presence_cache[key]:
             newfile = self.drive.CreateFile({'title': key, 'parents': [{'kind': 'drive#parentReference', 'id': self.root['id']}] })
             newfile.SetContentFile(file_)
             try:
                 newfile.Upload()
             except:
-                return Reply.TransferFailure_Store(key)
+                raise RemoteError("Upload error")
             else:
-                #self.__storeid(key, newfile['id'])
-                return Reply.TransferSuccess_Store(key)
+                self.presence_cache[key] = True
     
     def transfer_retrieve(self, key, file_):
         try:
             newfile = self.__getfile(key)
             newfile.GetContentFile(file_)
         except:
-            return Reply.TransferFailure_Retrieve(key)
-        else:
-            return Reply.TransferSuccess_Retrieve(key)
+            raise RemoteError("Download error")
     
     def checkpresent(self, key):
         try:
             file_ = self.__getfile(key)
         except:
-            self.lastcheckpresent = Reply.CheckpresentUnknown(key)
-            return self.lastcheckpresent
+            raise RemoteError("Connection Error")
         else:
             if file_:
-                self.lastcheckpresent = Reply.CheckpresentSuccess(key)
-                return self.lastcheckpresent
+                self.presence_cache[key] = True
             else:
-                self.lastcheckpresent = Reply.CheckpresentFailure(key)
-                return self.lastcheckpresent
+                self.presence_cache[key] = False
+            return self.presence_cache[key]
 
     def remove(self, key):
         try:
@@ -156,76 +134,60 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             if file_:
                 file_.Delete()
         except:
-            return Reply.RemoveFailure(key)
-        else:
-            return Reply.RemoveSuccess(key)
+            raise RemoteError("Error deleting key")
 
-    # export methods
-    def export(self, name):
-        self.exporting = self.__splitpath(name)
-
-    def transferexport_store(self, key, file_):
-        if self.lastcheckpresent and self.lastcheckpresent.key == key:
-            checkpresent_result = self.lastcheckpresent
-        else:
-            checkpresent_result = self.checkpresentexport(key)
-
-        if isinstance(checkpresent_result, Reply.CheckpresentSuccess):
-            return Reply.TransferSuccess_Store(key)
-        elif isinstance(checkpresent_result, Reply.CheckpresentUnknown):
-            return Reply.TransferFailure_Store(key)
-        else:
-            newfile = self.drive.CreateFile({'title': self.exporting['filename'], 'parents': [{'kind': 'drive#parentReference', 'id': self.exporting['parent']['id']}] })
+    def transferexport_store(self, key, file_, name):
+        if key not in self.presence_cache:
+            self.checkpresentexport(key, name)
+        if not self.presence_cache[name]:
+            fileinfo = self.__splitpath(name)
+            if not fileinfo['parent']:
+                fileinfo['parent'] = self.__getfolder(fileinfo['path'], root=self.root, create=True)
+            newfile = self.drive.CreateFile({'title': fileinfo['filename'], 'parents': [{'kind': 'drive#parentReference', 'id': fileinfo['parent']['id']}] })
             newfile.SetContentFile(file_)
             try:
                 newfile.Upload()
             except:
-                return Reply.TransferFailure_Store(key)
+                raise RemoteError("Upload error")
             else:
-                #self.__storeid(key, newfile['id'])
-                return Reply.TransferSuccess_Store(key)
+                self.presence_cache[name] = True
 
-    def transferexport_retrieve(self, key, file_):
+    def transferexport_retrieve(self, key, file_, name):
+        fileinfo = self.__splitpath(name)
         try:
-            newfile = self.__getfile(self.exporting['filename'], parent=self.exporting['parent'])
+            newfile = self.__getfile(fileinfo['filename'], parent=fileinfo['parent'])
             newfile.GetContentFile(file_)
         except:
-            return Reply.TransferFailure_Retrieve(key)
-        else:
-            return Reply.TransferSuccess_Retrieve(key)
+            raise RemoteError("Download error")
             
-    def checkpresentexport(self, key):
-        parent = self.__getfolder(self.exporting['path'], root=self.root, create=False)
-        if not parent:
-            self.lastcheckpresent = Reply.CheckpresentFailure(key)
-            return self.lastcheckpresent
+    def checkpresentexport(self, key, name):
+        fileinfo = self.__splitpath(name)
+        if not fileinfo['parent']:
+            self.presence_cache[name] = False
+            return False
 
         try:
-            file_ = self.__getfile(self.exporting['filename'], parent=parent)
+            file_ = self.__getfile(fileinfo['filename'], parent=fileinfo['parent'])
         except:
-            self.lastcheckpresent = Reply.CheckpresentUnknown(key)
-            return self.lastcheckpresent
+            raise RemoteError("Connection Error")
         else:
             if file_:
-                self.lastcheckpresent = Reply.CheckpresentSuccess(key)
-                return self.lastcheckpresent
+                self.presence_cache[name] = True
             else:
-                self.lastcheckpresent = Reply.CheckpresentFailure(key)
-                return self.lastcheckpresent
+                self.presence_cache[name] = False
+            return self.presence_cache[name]
 
-    def removeexport(self, key):
-        parent = self.__getfolder(self.exporting['path'], root=self.root, create=False)
-        if not parent:
-            return Reply.RemoveSuccess(key)
+    def removeexport(self, key, name):
+        fileinfo = self.__splitpath(name)
+        if not fileinfo['parent']:
+            return
 
         try:
-            file_ = self.__getfile(self.exporting['filename'], parent=parent)
+            file_ = self.__getfile(fileinfo['filename'], parent=fileinfo['parent'])
             if file_:
                 file_.Delete()
         except:
-            return Reply.RemoveFailure(key)
-        else:
-            return Reply.RemoveSuccess(key)
+            raise RemoteError("Error deleting file")
 
     def removeexportdirectory(self, directory):
         try:
@@ -233,29 +195,22 @@ class GoogleRemote(AnnexRemote.ExportRemote):
             if file_:
                 file_.Delete()
         except:
-            return Reply.RemoveexportdirectoryFailure()
-        else:
-            return Reply.RemoveexportdirectorySuccess()
+            raise RemoteError("Error deleting directory")
 
-    def renameexport(self, key, new_name):
+    def renameexport(self, key, name, new_name):
+        oldfileinfo = self.__splitpath(name)
         newfileinfo = self.__splitpath(new_name)
-        oldparent = self.__getfolder(self.exporting['path'], root=self.root, create=False)
         newparent = self.__getfolder(newfileinfo['path'], root=self.root, create=True)
         try:
-            file_ = self.__getfile(self.exporting['filename'], parent=oldparent)
-            if self.exporting['path'] != newfileinfo['path']:
+            file_ = self.__getfile(oldfileinfo['filename'], parent=oldfileinfo['parent'])
+            if oldfileinfo['path'] != newfileinfo['path']:
                 file_['parents'] = [{'kind': 'drive#parentReference', 'id': newparent['id']}]
-            if self.exporting['filename'] != newfileinfo['filename']:
+            if oldfileinfo['filename'] != newfileinfo['filename']:
                 file_['title'] = newfileinfo['filename']
             file_.Upload()
         except:
-            return Reply.RenameexportFailure(key)
-        else:
-            return Reply.RenameexportSuccess(key)
+            raise RemoteError("Error renaming file")
 
-    # internal methods
-    #def __storeid(self, key, id_):
-    #    self.annex.setstate(key, id_)
 
     def __getfile(self, filename, parent=None):
         #id_ = getstate(key)
@@ -294,6 +249,7 @@ class GoogleRemote(AnnexRemote.ExportRemote):
                     return None
             else:
                 raise self.AmbiguousFilenameException (f"There are two or more folders named {current_path}")
+                
         return current_folder
 
     def __splitpath(self, filename):
@@ -305,7 +261,7 @@ class GoogleRemote(AnnexRemote.ExportRemote):
         else:
             exportfile['path'] = ''
             exportfile['filename'] = splitpath[0]
-            exportfile['parent'] = self.root
+        exportfile['parent'] = self.__getfolder(exportfile['path'], root=self.root, create=False)
         return exportfile
 
 
@@ -317,7 +273,7 @@ class GoogleRemote(AnnexRemote.ExportRemote):
 def main():
     if len(sys.argv) == 2 and sys.argv[1] == "setup":
         with open(os.devnull, 'w') as devnull:
-            master = RemoteMaster(devnull)
+            master = Master(devnull)
             remote = GoogleRemote(master)
             remote.setup()
         return
@@ -327,9 +283,9 @@ def main():
     output = sys.stdout
     sys.stdout = sys.stderr
 
-    master = RemoteMaster(output)
+    master = Master(output)
     master.LinkRemote(GoogleRemote(master))
-    master.Listen(sys.stdin)
+    master.Listen()
 
 if __name__ == "__main__":
     main()
