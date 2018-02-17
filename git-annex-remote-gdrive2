@@ -31,6 +31,7 @@ class GoogleRemote(ExportRemote):
     def __init__(self, annex):
         super().__init__(annex)
         self.presence_cache = dict()
+        self.folder_cache = dict()
         # Authentication
         self.gauth = GoogleAuth()
         self.gauth.settings['client_config_backend'] = 'settings'
@@ -67,7 +68,7 @@ class GoogleRemote(ExportRemote):
             else:
                 self.gauth.Authorize()
             self.drive = GoogleDrive(self.gauth)
-            self.root = self.__getfolder(self.prefix)
+            self.root = self._getfolder(self.prefix)
         except:
             raise RemoteError("Failed to create directory on remote. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-gdrive setup'.")
 
@@ -87,7 +88,7 @@ class GoogleRemote(ExportRemote):
                 self.gauth.Authorize()
             
             self.drive = GoogleDrive(self.gauth)
-            self.root = self.__getfolder(self.prefix)
+            self.root = self._getfolder(self.prefix)
         except:
             raise RemoteError("Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive.")
         if self.root['id'] != self.annex.getconfig("root_id"):
@@ -111,14 +112,14 @@ class GoogleRemote(ExportRemote):
     
     def transfer_retrieve(self, key, file_):
         try:
-            newfile = self.__getfile(key)
+            newfile = self._getfile(key)
             newfile.GetContentFile(file_)
         except:
             raise RemoteError("Download error")
     
     def checkpresent(self, key):
         try:
-            file_ = self.__getfile(key)
+            file_ = self._getfile(key)
         except:
             raise RemoteError("Connection Error")
         else:
@@ -130,44 +131,47 @@ class GoogleRemote(ExportRemote):
 
     def remove(self, key):
         try:
-            file_ = self.__getfile(key)
+            file_ = self._getfile(key)
             if file_:
                 file_.Delete()
         except:
             raise RemoteError("Error deleting key")
 
     def transferexport_store(self, key, file_, name):
-        if key not in self.presence_cache:
+        if name not in self.presence_cache:
             self.checkpresentexport(key, name)
         if not self.presence_cache[name]:
-            fileinfo = self.__splitpath(name)
-            if not fileinfo['parent']:
-                fileinfo['parent'] = self.__getfolder(fileinfo['path'], root=self.root, create=True)
-            newfile = self.drive.CreateFile({'title': fileinfo['filename'], 'parents': [{'kind': 'drive#parentReference', 'id': fileinfo['parent']['id']}] })
+            fileinfo = self._splitpath(name)
+            parent = self._getfolder(fileinfo['path'], root=self.root, create=True)
+            newfile = self.drive.CreateFile({'title': fileinfo['filename'], 'parents': [{'kind': 'drive#parentReference', 'id': parent['id']}] })
             newfile.SetContentFile(file_)
             try:
                 newfile.Upload()
-            except:
-                raise RemoteError("Upload error")
+            except Exception as e:
+                raise RemoteError("Upload error", e)
             else:
                 self.presence_cache[name] = True
 
     def transferexport_retrieve(self, key, file_, name):
-        fileinfo = self.__splitpath(name)
+        fileinfo = self._splitpath(name)
+        parent = self._getfolder(fileinfo['path'], root=self.root, create=False)
+        if not parent:
+            raise RemoteError("File not present")
         try:
-            newfile = self.__getfile(fileinfo['filename'], parent=fileinfo['parent'])
+            newfile = self._getfile(fileinfo['filename'], parent=parent)
             newfile.GetContentFile(file_)
-        except:
-            raise RemoteError("Download error")
+        except Exception as e:
+            raise RemoteError("Download error", e)
             
     def checkpresentexport(self, key, name):
-        fileinfo = self.__splitpath(name)
-        if not fileinfo['parent']:
+        fileinfo = self._splitpath(name)
+        parent = self._getfolder(fileinfo['path'], root=self.root, create=False)
+        if not parent:
             self.presence_cache[name] = False
             return False
 
         try:
-            file_ = self.__getfile(fileinfo['filename'], parent=fileinfo['parent'])
+            file_ = self._getfile(fileinfo['filename'], parent=parent)
         except:
             raise RemoteError("Connection Error")
         else:
@@ -178,12 +182,13 @@ class GoogleRemote(ExportRemote):
             return self.presence_cache[name]
 
     def removeexport(self, key, name):
-        fileinfo = self.__splitpath(name)
-        if not fileinfo['parent']:
+        fileinfo = self._splitpath(name)
+        parent = self._getfolder(fileinfo['path'], root=self.root, create=False)
+        if not parent:
             return
 
         try:
-            file_ = self.__getfile(fileinfo['filename'], parent=fileinfo['parent'])
+            file_ = self._getfile(fileinfo['filename'], parent=parent)
             if file_:
                 file_.Delete()
         except:
@@ -191,18 +196,19 @@ class GoogleRemote(ExportRemote):
 
     def removeexportdirectory(self, directory):
         try:
-            file_ = self.__getfolder(directory, root=self.root, create=False)
+            file_ = self._getfolder(directory, root=self.root, create=False)
             if file_:
                 file_.Delete()
         except:
             raise RemoteError("Error deleting directory")
 
     def renameexport(self, key, name, new_name):
-        oldfileinfo = self.__splitpath(name)
-        newfileinfo = self.__splitpath(new_name)
-        newparent = self.__getfolder(newfileinfo['path'], root=self.root, create=True)
+        oldfileinfo = self._splitpath(name)
+        newfileinfo = self._splitpath(new_name)
+        oldparent = self._getfolder(oldfileinfo['path'], root=self.root, create=False)
+        newparent = self._getfolder(newfileinfo['path'], root=self.root, create=True)
         try:
-            file_ = self.__getfile(oldfileinfo['filename'], parent=oldfileinfo['parent'])
+            file_ = self._getfile(oldfileinfo['filename'], parent=oldfileinfo['parent'])
             if oldfileinfo['path'] != newfileinfo['path']:
                 file_['parents'] = [{'kind': 'drive#parentReference', 'id': newparent['id']}]
             if oldfileinfo['filename'] != newfileinfo['filename']:
@@ -212,7 +218,7 @@ class GoogleRemote(ExportRemote):
             raise RemoteError("Error renaming file")
 
 
-    def __getfile(self, filename, parent=None):
+    def _getfile(self, filename, parent=None):
         #id_ = getstate(key)
         #if id_:
         #    return id_
@@ -226,9 +232,8 @@ class GoogleRemote(ExportRemote):
         else:
             raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
     
-    def __getfolder(self, path, root=None, create=True):
-        path_list = path.split('/')
-        path_list = list(filter(None, path_list))
+    def _getfolder(self, path, root=None, create=True):
+        path_list = path.strip('/').split('/')
         if root:
             current_folder = root
             current_path = self.prefix
@@ -236,8 +241,14 @@ class GoogleRemote(ExportRemote):
             current_folder = self.drive.CreateFile({'id': 'root'})
             current_path = ""
 
+        if path == "":
+            return current_folder
         for folder in path_list:
             current_path = "/".join([current_path, folder])
+            if current_path in self.folder_cache:
+                current_folder = self.folder_cache[current_path]
+                continue
+                
             file_list = self.drive.ListFile({'q': f"'{current_folder['id']}' in parents and title='{folder}' and trashed=false"}).GetList()
             if (len(file_list) == 1):
                 current_folder = file_list[0]
@@ -249,10 +260,11 @@ class GoogleRemote(ExportRemote):
                     return None
             else:
                 raise self.AmbiguousFilenameException (f"There are two or more folders named {current_path}")
+            self.folder_cache[current_path] = current_folder
                 
         return current_folder
 
-    def __splitpath(self, filename):
+    def _splitpath(self, filename):
         splitpath = filename.rsplit('/',1)
         exportfile = dict()
         if len(splitpath) == 2:
@@ -261,14 +273,13 @@ class GoogleRemote(ExportRemote):
         else:
             exportfile['path'] = ''
             exportfile['filename'] = splitpath[0]
-        exportfile['parent'] = self.__getfolder(exportfile['path'], root=self.root, create=False)
         return exportfile
 
 
-    class FileNotFoundException(Exception):
-        pass
-    class AmbiguousFilenameException(Exception):
-        pass
+class FileNotFoundException(Exception):
+    pass
+class AmbiguousFilenameException(Exception):
+    pass
 
 def main():
     if len(sys.argv) == 2 and sys.argv[1] == "setup":
