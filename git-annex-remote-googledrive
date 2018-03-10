@@ -1,9 +1,9 @@
 #!/usr/bin/env python3.6
-# git-annex-remote-gdrive2 - python rewrite of git-annex-remote-gdrive to add direct support for Google Drive to git annex
+# git-annex-remote-googledrive adds direct support for Google Drive to git annex using the PyDrive lib
 #
-# Install in PATH as git-annex-remote-gdrive2
+# Install in PATH as git-annex-remote-googledrive
 #
-# Copyright (C) 2017  Silvio Ankermann
+# Copyright (C) 2017-2018  Silvio Ankermann
 #
 # This program is free software: you can redistribute it and/or modify it under the terms of version 3 of the GNU
 # General Public License as published by the Free Software Foundation.
