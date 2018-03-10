@@ -26,7 +26,7 @@ long_description= "git-annex-remote-googledrive adds direct and fast support for
 
 setup(
     name='git-annex-remote-googledrive',
-    version='0.9',
+    version='0.9.1',
     description='git annex special remote for Google Drive',
     long_description=long_description,
     url='https://github.com/Lykos153/git-annex-remote-googledrive',

@@ -35,7 +35,7 @@ class GoogleRemote(ExportRemote):
         # Authentication
         self.gauth = GoogleAuth()
         self.gauth.settings['client_config_backend'] = 'settings'
-        self.gauth.settings['client_config'] = {'client_id': '914459249505-ji3d9v92ealsmc4a63ns66uoj9t6mdf0.apps.googleusercontent.com', 'client_secret': 'ivD4Ms4eROu10sHc43ojgX05', 'auth_uri':'https://accounts.google.com/o/oauth2/auth', 'token_uri':'https://accounts.google.com/o/oauth2/token', 'revoke_uri': None, 'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob'}
+        self.gauth.settings['client_config'] = {'client_id': '275666578511-ndjt6mkns3vgb60cbo7csrjn6mbh8gbf.apps.googleusercontent.com', 'client_secret': 'Den2tu08pRU4s5KeCp5whas_', 'auth_uri':'https://accounts.google.com/o/oauth2/auth', 'token_uri':'https://accounts.google.com/o/oauth2/token', 'revoke_uri': None, 'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob'}
         
     def setup(self):
         self.gauth.LoadCredentialsFile("token.json")
