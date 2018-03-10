@@ -1,9 +1,18 @@
 # git-annex special remote for GoogleDrive
 
-git-annex-remote-googledrive adds direct and fast support for Google Drive to git-annex.
+git-annex-remote-googledrive adds direct and fast support for Google Drive to git-annex and comes with some awesome new features.
 
 __Stability note:__
 This software is still being tested. _Although it should be reliable, please for the time being keep additional copies of all data you do not want to lose._ A [numcopies](https://git-annex.branchable.com/git-annex-numcopies/) value greater than 1 is a good idea anyway.
+
+## Features
+
+* [exporttree remotes](https://git-annex.branchable.com/git-annex-export)
+* storing the credentials within the repository
+* using different Google accounts simultaniously (even within the same repository)
+* being even faster by keeping the HTTP connection open
+* ...
+
 
 ## Requirements
 git-annex-remote-googledrive currently requires Python 3.6. I'm probably adding support for older versions in the future.
