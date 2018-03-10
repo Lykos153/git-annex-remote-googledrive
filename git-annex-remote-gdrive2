@@ -21,9 +21,9 @@ from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 from oauth2client.client import OAuth2Credentials
 
-from AnnexRemote import Master
-from AnnexRemote import ExportRemote
-from AnnexRemote import RemoteError
+from annexremote import Master
+from annexremote import ExportRemote
+from annexremote import RemoteError
 
 # The Google class
 class GoogleRemote(ExportRemote):

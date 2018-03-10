@@ -6,15 +6,15 @@ __Stability note:__
 Still testing. _Although it should be reliable, please for the time being keep additional copies of all data you do not want to lose._ A [numcopies](https://git-annex.branchable.com/git-annex-numcopies/) value greater than 1 is a good idea anyway.
 
 ## Requirements
-git-annex-remote-gdrive2 requires Python 3.6 and the [pydrive](https://github.com/googledrive/PyDrive) library.
+git-annex-remote-googledrive requires Python 3.6, [pydrive](https://github.com/googledrive/PyDrive) and [annexremote](https://github.com/Lykos153/AnnexRemote).
 
-`pip3.6 install pydrive`
+`pip3.6 install pydrive annexremote`
 
 ## Installation
 
    1. [Install git-annex](https://git-annex.branchable.com/install/)
-   2. Make sure PyDrive is installed.
-   3. Copy `git-annex-remote-gdrive2` and `AnnexRemote.py` into your $PATH
+   2. Make sure PyDrive and annexremote are installed.
+   3. Copy `git-annex-remote-gdrive2` into your $PATH
 
 ## Usage
 
