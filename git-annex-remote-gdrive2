@@ -230,7 +230,7 @@ class GoogleRemote(ExportRemote):
         elif (len(file_list) == 0):
             return None
         else:
-            raise self.AmbiguousFilenameException (f"There are two or more files named {key}")
+            raise RemoteError (f"There are two or more files named {key}")
     
     def _getfolder(self, path, root=None, create=True):
         path_list = path.strip('/').split('/')
@@ -274,12 +274,6 @@ class GoogleRemote(ExportRemote):
             exportfile['path'] = ''
             exportfile['filename'] = splitpath[0]
         return exportfile
-
-
-class FileNotFoundException(Exception):
-    pass
-class AmbiguousFilenameException(Exception):
-    pass
 
 def main():
     if len(sys.argv) == 2 and sys.argv[1] == "setup":
