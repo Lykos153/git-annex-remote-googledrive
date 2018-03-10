@@ -6,15 +6,13 @@ __Stability note:__
 This software is still being tested. _Although it should be reliable, please for the time being keep additional copies of all data you do not want to lose._ A [numcopies](https://git-annex.branchable.com/git-annex-numcopies/) value greater than 1 is a good idea anyway.
 
 ## Requirements
-git-annex-remote-googledrive requires Python 3.6, [pydrive](https://github.com/googledrive/PyDrive) and [annexremote](https://github.com/Lykos153/AnnexRemote).
+git-annex-remote-googledrive currently requires Python 3.6. I'm probably adding support for older versions in the future.
 
-`pip3.6 install pydrive annexremote`
 
 ## Installation
+`pip3.6 install git-annex-remote-googledrive`
 
-   1. [Install git-annex](https://git-annex.branchable.com/install/)
-   2. Make sure PyDrive and annexremote are installed.
-   3. Copy `git-annex-remote-googledrive` into your $PATH
+For Arch Linux, there is a package available in the [AUR](https://aur.archlinux.org/packages/git-annex-remote-googledrive)
 
 ## Usage
 
