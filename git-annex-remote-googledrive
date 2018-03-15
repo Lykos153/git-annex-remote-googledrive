@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 
 import os
 import sys
+import traceback
 
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
@@ -68,9 +69,15 @@ class GoogleRemote(ExportRemote):
             else:
                 self.gauth.Authorize()
             self.drive = GoogleDrive(self.gauth)
+        except:
+            self._send_traceback(traceback.format_exc())
+            raise RemoteError("Failed to authenticate with Google. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
+
+        try:
             self.root = self._getfolder(self.prefix)
         except:
-            raise RemoteError("Failed to create directory on remote. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
+            self._send_traceback(traceback.format_exc())
+            raise RemoteError("Failed to create directory on remote. Run the command with --debug to get more information.")
 
         self.annex.setconfig("root_id", self.root['id'])
         credentials = ''.join(self.gauth.credentials.to_json().split())
@@ -88,9 +95,17 @@ class GoogleRemote(ExportRemote):
                 self.gauth.Authorize()
             
             self.drive = GoogleDrive(self.gauth)
+        except:
+            self._send_traceback(traceback.format_exc())
+            raise RemoteError("Failed to authenticate with Google. Ensure that you are connected to the internet \
+or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremote <remotename>'.")
+
+        try:
             self.root = self._getfolder(self.prefix)
         except:
-            raise RemoteError("Failed to create directory on remote. Ensure that the remote has been configured correctly and has permission to access your Drive.")
+            self._send_traceback(traceback.format_exc())
+            raise RemoteError("Failed to create directory on remote. Ensure that  has been configured correctly and has permission to access your Drive.")
+
         if self.root['id'] != self.annex.getconfig("root_id"):
             raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
 
@@ -106,6 +121,7 @@ class GoogleRemote(ExportRemote):
             try:
                 newfile.Upload()
             except:
+                self._send_traceback(traceback.format_exc())
                 raise RemoteError("Upload error")
             else:
                 self.presence_cache[key] = True
@@ -115,12 +131,14 @@ class GoogleRemote(ExportRemote):
             newfile = self._getfile(key)
             newfile.GetContentFile(file_)
         except:
+            self._send_traceback(traceback.format_exc())
             raise RemoteError("Download error")
     
     def checkpresent(self, key):
         try:
             file_ = self._getfile(key)
         except:
+            self._send_traceback(traceback.format_exc())
             raise RemoteError("Connection Error")
         else:
             if file_:
@@ -135,6 +153,7 @@ class GoogleRemote(ExportRemote):
             if file_:
                 file_.Delete()
         except:
+            self._send_traceback(traceback.format_exc())
             raise RemoteError("Error deleting key")
 
     def transferexport_store(self, key, file_, name):
@@ -148,6 +167,7 @@ class GoogleRemote(ExportRemote):
             try:
                 newfile.Upload()
             except Exception as e:
+                self._send_traceback(traceback.format_exc())
                 raise RemoteError("Upload error", e)
             else:
                 self.presence_cache[name] = True
@@ -161,6 +181,7 @@ class GoogleRemote(ExportRemote):
             newfile = self._getfile(fileinfo['filename'], parent=parent)
             newfile.GetContentFile(file_)
         except Exception as e:
+            self._send_traceback(traceback.format_exc())
             raise RemoteError("Download error", e)
             
     def checkpresentexport(self, key, name):
@@ -173,6 +194,7 @@ class GoogleRemote(ExportRemote):
         try:
             file_ = self._getfile(fileinfo['filename'], parent=parent)
         except:
+            self._send_traceback(traceback.format_exc())
             raise RemoteError("Connection Error")
         else:
             if file_:
@@ -192,6 +214,7 @@ class GoogleRemote(ExportRemote):
             if file_:
                 file_.Delete()
         except:
+            self._send_traceback(traceback.format_exc())
             raise RemoteError("Error deleting file")
 
     def removeexportdirectory(self, directory):
@@ -200,6 +223,7 @@ class GoogleRemote(ExportRemote):
             if file_:
                 file_.Delete()
         except:
+            self._send_traceback(traceback.format_exc())
             raise RemoteError("Error deleting directory")
 
     def renameexport(self, key, name, new_name):
@@ -215,6 +239,7 @@ class GoogleRemote(ExportRemote):
                 file_['title'] = newfileinfo['filename']
             file_.Upload()
         except:
+            self._send_traceback(traceback.format_exc())
             raise RemoteError("Error renaming file")
 
 
@@ -274,6 +299,10 @@ class GoogleRemote(ExportRemote):
             exportfile['path'] = ''
             exportfile['filename'] = splitpath[0]
         return exportfile
+    
+    def _send_traceback(self, tb):
+        for line in tb.splitlines():
+            self.annex.debug(line)
 
 def main():
     if len(sys.argv) == 2 and sys.argv[1] == "setup":
