@@ -13,13 +13,8 @@ This software is still being tested. _Although it should be reliable, please for
 * being even faster by keeping the HTTP connection open
 * ...
 
-
-## Requirements
-git-annex-remote-googledrive currently requires Python 3.6. I'm probably adding support for older versions in the future.
-
-
 ## Installation
-`pip3.6 install git-annex-remote-googledrive`
+`pip3 install git-annex-remote-googledrive`
 
 For Arch Linux, there is a package available in the [AUR](https://aur.archlinux.org/packages/git-annex-remote-googledrive)
 

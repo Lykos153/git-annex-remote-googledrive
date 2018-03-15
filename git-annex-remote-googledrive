@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3
 # git-annex-remote-googledrive adds direct support for Google Drive to git annex using the PyDrive lib
 #
 # Install in PATH as git-annex-remote-googledrive
@@ -224,13 +224,13 @@ class GoogleRemote(ExportRemote):
         #    return id_
         if not parent:
             parent = self.root
-        file_list = self.drive.ListFile({'q': f"'{parent['id']}' in parents and title='{filename}' and trashed=false"}).GetList()
+        file_list = self.drive.ListFile({'q': "'{parent_id}' in parents and title='{filename}' and trashed=false".format(parent_id=parent['id'], filename=filename)}).GetList()
         if (len(file_list) == 1):
             return file_list[0]
         elif (len(file_list) == 0):
             return None
         else:
-            raise RemoteError (f"There are two or more files named {key}")
+            raise RemoteError ("There are two or more files named {key}".format(key=key))
     
     def _getfolder(self, path, root=None, create=True):
         path_list = path.strip('/').split('/')
@@ -249,7 +249,7 @@ class GoogleRemote(ExportRemote):
                 current_folder = self.folder_cache[current_path]
                 continue
                 
-            file_list = self.drive.ListFile({'q': f"'{current_folder['id']}' in parents and title='{folder}' and trashed=false"}).GetList()
+            file_list = self.drive.ListFile({'q': "'{current_folder_id}' in parents and title='{folder}' and trashed=false".format(current_folder_id=current_folder['id'], folder=folder)}).GetList()
             if (len(file_list) == 1):
                 current_folder = file_list[0]
             elif (len(file_list) == 0):
@@ -259,7 +259,7 @@ class GoogleRemote(ExportRemote):
                 else:
                     return None
             else:
-                raise self.AmbiguousFilenameException (f"There are two or more folders named {current_path}")
+                raise self.AmbiguousFilenameException ("There are two or more folders named {current_path}".format(current_path=current_path))
             self.folder_cache[current_path] = current_folder
                 
         return current_folder
