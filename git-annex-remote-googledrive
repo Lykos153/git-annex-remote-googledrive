@@ -70,7 +70,7 @@ class GoogleRemote(ExportRemote):
             self.drive = GoogleDrive(self.gauth)
             self.root = self._getfolder(self.prefix)
         except:
-            raise RemoteError("Failed to create directory on remote. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-gdrive setup'.")
+            raise RemoteError("Failed to create directory on remote. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
 
         self.annex.setconfig("root_id", self.root['id'])
         credentials = ''.join(self.gauth.credentials.to_json().split())
@@ -90,7 +90,7 @@ class GoogleRemote(ExportRemote):
             self.drive = GoogleDrive(self.gauth)
             self.root = self._getfolder(self.prefix)
         except:
-            raise RemoteError("Failed to create directory on remote. Ensure that gdrive has been configured correctly and has permission to access your Drive.")
+            raise RemoteError("Failed to create directory on remote. Ensure that the remote has been configured correctly and has permission to access your Drive.")
         if self.root['id'] != self.annex.getconfig("root_id"):
             raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
 
