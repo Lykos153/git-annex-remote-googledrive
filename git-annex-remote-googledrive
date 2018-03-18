@@ -26,14 +26,13 @@ from annexremote import Master
 from annexremote import ExportRemote
 from annexremote import RemoteError
 
-# The Google class
 class GoogleRemote(ExportRemote):
 
     def __init__(self, annex):
         super().__init__(annex)
         self.presence_cache = dict()
         self.folder_cache = dict()
-        # Authentication
+        
         self.gauth = GoogleAuth()
         self.gauth.settings['client_config_backend'] = 'settings'
         self.gauth.settings['client_config'] = {'client_id': '275666578511-ndjt6mkns3vgb60cbo7csrjn6mbh8gbf.apps.googleusercontent.com', 'client_secret': 'Den2tu08pRU4s5KeCp5whas_', 'auth_uri':'https://accounts.google.com/o/oauth2/auth', 'token_uri':'https://accounts.google.com/o/oauth2/token', 'revoke_uri': None, 'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob'}
@@ -43,7 +42,6 @@ class GoogleRemote(ExportRemote):
         
         if self.gauth.credentials is None:
             self.gauth.CommandLineAuth()
-            #self.gauth.LocalWebserverAuth()
         elif self.gauth.access_token_expired:
             self.gauth.Refresh()
         else:
@@ -244,9 +242,6 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
 
 
     def _getfile(self, filename, parent=None):
-        #id_ = getstate(key)
-        #if id_:
-        #    return id_
         if not parent:
             parent = self.root
         file_list = self.drive.ListFile({'q': "'{parent_id}' in parents and title='{filename}' and trashed=false".format(parent_id=parent['id'], filename=filename.replace("'", r"\'"))}).GetList()
