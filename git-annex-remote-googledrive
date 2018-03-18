@@ -249,7 +249,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
         #    return id_
         if not parent:
             parent = self.root
-        file_list = self.drive.ListFile({'q': "'{parent_id}' in parents and title='{filename}' and trashed=false".format(parent_id=parent['id'], filename=filename)}).GetList()
+        file_list = self.drive.ListFile({'q': "'{parent_id}' in parents and title='{filename}' and trashed=false".format(parent_id=parent['id'], filename=filename.replace("'", r"\'"))}).GetList()
         if (len(file_list) == 1):
             return file_list[0]
         elif (len(file_list) == 0):
@@ -274,7 +274,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                 current_folder = self.folder_cache[current_path]
                 continue
                 
-            file_list = self.drive.ListFile({'q': "'{current_folder_id}' in parents and title='{folder}' and trashed=false".format(current_folder_id=current_folder['id'], folder=folder)}).GetList()
+            file_list = self.drive.ListFile({'q': "'{current_folder_id}' in parents and title='{folder}' and trashed=false".format(current_folder_id=current_folder['id'], folder=folder.replace("'", r"\'"))}).GetList()
             if (len(file_list) == 1):
                 current_folder = file_list[0]
             elif (len(file_list) == 0):
