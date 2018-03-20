@@ -115,7 +115,8 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             self.checkpresent(key)
         if not self.presence_cache[key]:
             newfile = self.drive.CreateFile({'title': key, 'parents': [{'kind': 'drive#parentReference', 'id': self.root['id']}] })
-            newfile.SetContentFile(file_)
+            if os.path.getsize(file_):
+                newfile.SetContentFile(file_)
             try:
                 newfile.Upload()
             except:
@@ -161,7 +162,8 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             fileinfo = self._splitpath(name)
             parent = self._getfolder(fileinfo['path'], root=self.root, create=True)
             newfile = self.drive.CreateFile({'title': fileinfo['filename'], 'parents': [{'kind': 'drive#parentReference', 'id': parent['id']}] })
-            newfile.SetContentFile(file_)
+            if os.path.getsize(file_):
+                newfile.SetContentFile(file_)
             try:
                 newfile.Upload()
             except Exception as e:
