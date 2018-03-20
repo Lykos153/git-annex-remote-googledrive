@@ -26,6 +26,7 @@ from annexremote import Master
 from annexremote import ExportRemote
 from annexremote import RemoteError
 
+versions = None
 
 class GoogleRemote(ExportRemote):
 
@@ -59,6 +60,7 @@ class GoogleRemote(ExportRemote):
         print("Setup complete. An auth token was stored in token.json. Now run 'git annex initremote' with your desired parameters. If you don't run it from the same folder, specify via token=path/to/token.json")
 
     def initremote(self):
+        self._send_version()
         self.prefix = self.annex.getconfig('prefix')
 
         token_file = self.annex.getconfig('token') or 'token.json'
@@ -91,6 +93,7 @@ class GoogleRemote(ExportRemote):
         self.annex.setcreds('credentials', credentials, '')
 
     def prepare(self):
+        self._send_version()
         self.prefix = self.annex.getconfig('prefix')
         credentials = self.annex.getcreds('credentials')['user']
 
@@ -329,17 +332,35 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
         return exportfile
 
     def _send_traceback(self):
+        self._send_version()
         for line in traceback.format_exc().splitlines():
             self.annex.debug(line)
-
+            
+    def _send_version(self):
+        global versions
+        if not versions:
+            versions = {'version': "unknown"}
+        self.annex.debug("Running {} version {}".format(
+                            os.path.basename(__file__),
+                            versions['version']
+                        ))
+        if 'full-revisionid' in versions:
+            self.annex.debug("Revision {}".format(versions['full-revisionid']))
 
 def main():
-    if len(sys.argv) == 2 and sys.argv[1] == 'setup':
-        with open(os.devnull, 'w') as devnull:
-            master = Master(devnull)
-            remote = GoogleRemote(master)
-            remote.setup()
-        return
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'setup':
+            with open(os.devnull, 'w') as devnull:
+                master = Master(devnull)
+                remote = GoogleRemote(master)
+                remote.setup()
+            return
+        elif sys.argv[1] == 'version':
+            if versions:
+                print(os.path.basename(__file__), versions['version'])
+            else:
+                print(os.path.basename(__file__), "- Version unknown")
+            return
 
     # redirect all non-protocol-output to stderr
 

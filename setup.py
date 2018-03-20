@@ -18,14 +18,36 @@
 
 from setuptools import setup, find_packages
 from codecs import open
-from os import path
+import os, tempfile
+from distutils.command.build_scripts import build_scripts
 
-here = path.abspath(path.dirname(__file__))
+import versioneer
+commands = versioneer.get_cmdclass().copy()
+
 long_description= "git-annex-remote-googledrive adds direct and fast support for Google Drive to git-annex."
+
+class my_build_scripts(build_scripts):
+    def run(self):
+        versions = versioneer.get_versions()
+        tempdir = tempfile.mkdtemp()
+        generated = os.path.join(tempdir, "git-annex-remote-googledrive")
+        with open(generated, "wb") as f:
+            for line in open("git-annex-remote-googledrive", "rb"):
+                if line.strip().decode("ascii") == "versions = None":
+                    f.write('versions = {}\n'.format(versions).encode("ascii"))
+                else:
+                    f.write(line)
+        self.scripts = [generated]
+        rc = build_scripts.run(self)
+        os.unlink(generated)
+        os.rmdir(tempdir)
+        return rc
+commands["build_scripts"] = my_build_scripts
 
 setup(
     name='git-annex-remote-googledrive',
-    version='0.10.0',
+    version=versioneer.get_version(),
+    cmdclass=commands,
     description='git annex special remote for Google Drive',
     long_description=long_description,
     url='https://github.com/Lykos153/git-annex-remote-googledrive',
