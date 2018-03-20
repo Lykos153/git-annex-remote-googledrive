@@ -24,7 +24,9 @@ from distutils.command.build_scripts import build_scripts
 import versioneer
 commands = versioneer.get_cmdclass().copy()
 
-long_description= "git-annex-remote-googledrive adds direct and fast support for Google Drive to git-annex."
+def readme():
+    with open('README.md') as f:
+        return f.read()
 
 class my_build_scripts(build_scripts):
     def run(self):
@@ -49,7 +51,8 @@ setup(
     version=versioneer.get_version(),
     cmdclass=commands,
     description='git annex special remote for Google Drive',
-    long_description=long_description,
+    long_description=readme(),
+    long_description_content_type='text/markdown',
     url='https://github.com/Lykos153/git-annex-remote-googledrive',
     author='Silvio Ankermann',
     author_email='silvio@booq.org',
