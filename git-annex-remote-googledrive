@@ -170,7 +170,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             self._send_traceback()
             raise RemoteError("Error deleting key")
 
-    def transferexport_store(self, key, fpath_, name):
+    def transferexport_store(self, key, fpath, name):
         if name not in self.presence_cache:
             self.checkpresentexport(key, name)
         if not self.presence_cache[name]:
