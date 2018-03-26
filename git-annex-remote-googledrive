@@ -22,6 +22,7 @@ from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 from oauth2client.client import OAuth2Credentials
 
+import annexremote
 from annexremote import Master
 from annexremote import ExportRemote
 from annexremote import RemoteError
@@ -337,15 +338,25 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             self.annex.debug(line)
             
     def _send_version(self):
-        global versions
-        if not versions:
-            versions = {'version': "unknown"}
+        global get_versions
+        versions = get_versions()
         self.annex.debug("Running {} version {}".format(
                             os.path.basename(__file__),
-                            versions['version']
+                            versions['this']
                         ))
-        if 'full-revisionid' in versions:
-            self.annex.debug("Revision {}".format(versions['full-revisionid']))
+        self.annex.debug("Using AnnexRemote version", versions['annexremote'])
+
+def get_versions():
+    output = {}
+    if versions:
+        output['this'] = versions['version']
+    else:
+        output['this'] = "unknown"
+    if hasattr(annexremote, '__version__'):
+        output['annexremote'] = annexremote.__version__
+    else:
+        output['annexremote'] = "unknown"
+    return output
 
 def main():
     if len(sys.argv) > 1:
@@ -356,10 +367,8 @@ def main():
                 remote.setup()
             return
         elif sys.argv[1] == 'version':
-            if versions:
-                print(os.path.basename(__file__), versions['version'])
-            else:
-                print(os.path.basename(__file__), "- Version unknown")
+            print(os.path.basename(__file__), get_versions()['this'])
+            print("Using AnnexRemote", get_versions()['annexremote'])
             return
 
     # redirect all non-protocol-output to stderr
