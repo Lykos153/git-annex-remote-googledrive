@@ -12,11 +12,7 @@
 # warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 #
 
-from abc import ABC, abstractmethod
-
-import os
-import sys
-import traceback
+import os, sys, traceback
 
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
@@ -316,7 +312,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                 else:
                     return None
             else:
-                raise self.AmbiguousFilenameException ("There are two or more folders named {current_path}".format(current_path=current_path))
+                raise self.RemoteError ("There are two or more folders named {current_path}".format(current_path=current_path))
             self.folder_cache[current_path] = current_folder
 
         return current_folder
