@@ -13,6 +13,7 @@
 #
 
 import os, sys, traceback
+import json
 
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
@@ -67,6 +68,7 @@ class GoogleRemote(ExportRemote):
         super().__init__(annex)
         self.presence_cache = dict()
         self.folder_cache = dict()
+        self.state_cache = dict()
 
         self.gauth = GoogleAuth()
         self.gauth.settings['client_config_backend'] = 'settings'
@@ -301,6 +303,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             except:
                 del self.presence_cache[name]
             else:
+                self._set_key_info(key, 'md5', newfile['md5Checksum'])
                 self.presence_cache[name] = True
 
     @remotemethod
@@ -324,8 +327,13 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             return False
         file_ = self._getfile(fileinfo['filename'], parent=parent)
         
-        if file_:
+        if file_ and file_['md5Checksum'] == self._get_key_info(key, 'md5'):
             self.presence_cache[name] = True
+        elif file_ and self._get_key_info(key, 'md5') == None:
+            self.presence_cache[name] = True
+            self._set_key_info(key, 'md5', file_['md5Checksum'])
+        elif file_ and file_['md5Checksum'] != self._get_key_info(key, 'md5'):
+            raise RemoteError("{} was changed on remote side. Check the file or delete it in order to continue.".format(name))
         else:
             self.presence_cache[name] = False
         return self.presence_cache[name]
@@ -460,7 +468,24 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             self.annex.info(message)
         except ProtocolError:
             self.annex.debug(message)
-
+            
+    def _get_key_info(self, key, field):
+        if key not in self.state_cache or field not in self.state_cache[key]:
+            try:
+                self.state_cache[key] = json.loads(self.annex.getstate(key))
+            except:
+                self.state_cache[key] = {field: None}
+        return self.state_cache[key][field]
+            
+    def _set_key_info(self, key, field, value):
+        if self._get_key_info(key, field) != value:
+            self.state_cache[key][field] = value
+            self.annex.setstate(key, 
+                                json.dumps(
+                                    self.state_cache[key],
+                                    separators=(',', ':')
+                                ))
+        
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
