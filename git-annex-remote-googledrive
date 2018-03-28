@@ -218,6 +218,18 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
 
         credentials = ''.join(self.gauth.credentials.to_json().split())
         self.annex.setcreds('credentials', credentials, '')
+        
+        # Clean up test keys
+        query = "'{root_id}' in parents and \
+                 title contains 'this-is-a-test-key'".format(
+                    root_id=self.root['id']
+                 )
+        file_list = self.drive.ListFile({'q': query}).GetList()
+        if len(file_list):
+            self._info("Info: Cleaning up test keys")
+        for file_ in file_list:
+            file_.Delete()
+    
     
     @remotemethod
     @retry(**retry_conditions)
@@ -442,6 +454,12 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                             versions['this']
                         ))
         self.annex.debug("Using AnnexRemote version", versions['annexremote'])
+    
+    def _info(self, message):
+        try:
+            self.annex.info(message)
+        except ProtocolError:
+            self.annex.debug(message)
 
 class bcolors:
     HEADER = '\033[95m'
