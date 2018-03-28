@@ -158,9 +158,13 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
         if key not in self.presence_cache:
             self.checkpresent(key)
         if not self.presence_cache[key]:
-            newfile = self.drive.CreateFile({'title': key,
-                    'parents': [{'kind': 'drive#parentReference',
-                    'id': self.root['id']}]})
+            newfile = self.drive.CreateFile({
+                            'title': key,
+                            'parents': [{
+                                'kind': 'drive#parentReference',
+                                'id': self.root['id']
+                            }],
+                        })
             if os.path.getsize(fpath):
                 newfile.SetContentFile(fpath)
             try:
@@ -204,9 +208,13 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             parent = self._getfolder(fileinfo['path'], root=self.root,
                     create=True)
             newfile = \
-                self.drive.CreateFile({'title': fileinfo['filename'],
-                    'parents': [{'kind': 'drive#parentReference',
-                    'id': parent['id']}]})
+                self.drive.CreateFile({
+                            'title': fileinfo['filename'],
+                            'parents': [{
+                                'kind': 'drive#parentReference',
+                                'id': parent['id']
+                            }]
+                        })
             if os.path.getsize(fpath):
                 newfile.SetContentFile(fpath)
             try:
@@ -284,16 +292,19 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
     def _getfile(self, filename, parent=None):
         if not parent:
             parent = self.root
-        file_list = self.drive.ListFile({'q': "'{parent_id}' in parents and title='{filename}' and trashed=false".format(
-                                                    parent_id=parent['id'], filename=filename.replace("'", r"\'")
-                                                )
-                                        }).GetList()
+        query = "'{parent_id}' in parents and \
+                 title='{filename}' and \
+                 trashed=false".format(
+                    parent_id=parent['id'],
+                    filename=filename.replace("'", r"\'")
+                 )
+        file_list = self.drive.ListFile({'q': query}).GetList()
         if (len(file_list) == 1):
             return file_list[0]
         elif len(file_list) == 0:
             return None
         else:
-            raise RemoteError ("There are two or more files named {key}".format(key=key))
+            raise RemoteError ("There are two or more files named {}".format(key))
     
     def _getfolder(self, path, root=None, create=True):
         path_list = path.strip('/').split('/')
@@ -312,10 +323,13 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                 current_folder = self.folder_cache[current_path]
                 continue
                 
-            file_list = self.drive.ListFile({'q': "'{current_folder_id}' in parents and title='{folder}' and trashed=false".format(
-                                                        current_folder_id=current_folder['id'], folder=folder.replace("'", r"\'")
-                                                    )
-                                            }).GetList()
+            query = "'{current_folder_id}' in parents and \
+                     title='{folder}' and \
+                     trashed=false".format(
+                        current_folder_id=current_folder['id'], 
+                        folder=folder.replace("'", r"\'")
+                     )
+            file_list = self.drive.ListFile({'q': query}).GetList()
             if (len(file_list) == 1):
                 current_folder = file_list[0]
             elif len(file_list) == 0:
@@ -330,7 +344,9 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                 else:
                     return None
             else:
-                raise self.RemoteError ("There are two or more folders named {current_path}".format(current_path=current_path))
+                raise self.RemoteError(
+                    "There are two or more folders named {}".format(current_path)
+                )
             self.folder_cache[current_path] = current_folder
 
         return current_folder
