@@ -25,7 +25,7 @@ from functools import wraps
 
 from tenacity import Retrying, retry
 from tenacity import retry_if_exception_type
-from tenacity import wait_exponential
+from tenacity import wait_exponential, wait_fixed
 from tenacity import stop_after_attempt
 
 import annexremote
@@ -91,11 +91,67 @@ class GoogleRemote(ExportRemote):
 
         self.gauth.SaveCredentialsFile('token.json')
         print("Setup complete. An auth token was stored in token.json. Now run 'git annex initremote' with your desired parameters. If you don't run it from the same folder, specify via token=path/to/token.json")
+         
+    def migrate(self, prefix):
+        self.prefix = prefix
+        token_file = 'token.json'
+        self.gauth.LoadCredentialsFile(token_file)
+
+        try:
+            if self.gauth.access_token_expired:
+                self.gauth.Refresh()
+            else:
+                self.gauth.Authorize()
+            self.drive = GoogleDrive(self.gauth)
+            self.root = self._getfolder(self.prefix, create=False)
+        except:
+            raise RemoteError("Failed to access the remote directory. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
+
+        if not self.root:
+            raise RemoteError("'{}' does not exist on the remote.".format(prefix))
+
+        if (self.root == self.drive.CreateFile({'id': 'root'})):
+            raise RemoteError("Root is not an allowed prefix")
+            
+        self.migration_count = {'moved':0, 'deleted':0}
+        self._migration_traverse(self.root, self.prefix)
+        
+    @retry(wait=wait_fixed(2), retry=retry_conditions['retry'])   
+    def _migration_traverse(self, current_folder, current_path):
+        if current_folder == self.root:
+            query = "'{}' in parents and \
+                     mimeType='application/vnd.google-apps.folder' and \
+                     trashed=false".format(current_folder['id'])
+            for file_list in self.drive.ListFile({
+                        'q': query , 
+                        'maxResults': 100, 
+                        'orderBy': 'title'}):
+                for file_ in file_list:
+                    self._migration_traverse(file_, current_path+"/"+file_['title'])
+        else:
+            query = "'{}' in parents and trashed=false".format(current_folder['id'])
+            for file_list in self.drive.ListFile({
+                            'q': query,
+                            'maxResults': 100,
+                            'orderBy': 'title'}):
+                for file_ in file_list:
+                    if file_['mimeType'] == 'application/vnd.google-apps.folder':
+                        self._migration_traverse(file_, current_path+"/"+file_['title'])
+                    else:
+                        print ( "Moving {}/{}".format(current_path,file_['title']) )
+                        file_['parents'] = [{'kind': 'drive#parentReference', 'id': self.root['id']}]
+                        file_.Upload()
+                        self.migration_count['moved'] += 1
+            print ("Deleting folder {}".format(current_path))
+            current_folder.Delete()
+            self.migration_count['deleted'] += 1
 
     @remotemethod
     def initremote(self):
         self._send_version()
         self.prefix = self.annex.getconfig('prefix')
+        if self.prefix == '' or self.prefix == '/':
+            raise RemoteError("prefix must not be empty.")
 
         token_file = self.annex.getconfig('token') or 'token.json'
         self.gauth.LoadCredentialsFile(token_file)
@@ -387,6 +443,16 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                         ))
         self.annex.debug("Using AnnexRemote version", versions['annexremote'])
 
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
 def get_versions():
     output = {}
     if versions:
@@ -412,7 +478,36 @@ def main():
             print("Using AnnexRemote", get_versions()['annexremote'])
             return
         elif sys.argv[1] == 'migrate':
-            print("Not yet implemented")
+            with open(os.devnull, 'w') as devnull:
+                master = Master(devnull)
+                remote = GoogleRemote(master)
+                if len(sys.argv) != 3:
+                    print ("Usage: git-annex-remote-googledrive migrate <prefix>")
+                    return
+                    
+                try:
+                    remote.migrate(sys.argv[2])
+                except (KeyboardInterrupt, SystemExit):
+                    print ("\n{}Exiting.".format(bcolors.WARNING))
+                    if hasattr(remote, 'migration_count') and \
+                                    remote.migration_count['moved'] != 0:
+                        print ("The remote is in an undefined state now. Re-run this script before using git-annex on it.")
+                except Exception as e:
+                    print ("\n{}Error: {}".format(bcolors.FAIL, e))
+                    if hasattr(remote, 'migration_count') and \
+                                    remote.migration_count['moved'] != 0:
+                        print ("The remote is in an undefined state now. Re-run this script before using git-annex on it.")
+                else:
+                    print ("\n{}Finished.".format(bcolors.OKGREEN))
+                    print ("The remote has benn successfully migrated and can now be used with git-annex-remote-googledrive. Consider checking consistency with 'git annex fsck --from=<remotename> --fast'")
+                    print ( "Processed {} subfolders".format(
+                                    remote.migration_count['deleted']))
+                    print ( "Moved {} files{}".format(
+                                remote.migration_count['moved'],
+                                bcolors.ENDC
+                            )
+                    )
+
             return
 
     output = sys.stdout
