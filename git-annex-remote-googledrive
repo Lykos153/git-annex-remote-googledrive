@@ -18,12 +18,28 @@ from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 from oauth2client.client import OAuth2Credentials
 
+from functools import wraps
 import annexremote
 from annexremote import Master
 from annexremote import ExportRemote
 from annexremote import RemoteError
 
 versions = None
+
+def remotemethod(f):
+    @wraps(f)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return f(self, *args, **kwargs)
+        except RemoteError:
+            self._send_traceback()
+            raise
+        except:
+            self._send_traceback()
+            raise RemoteError
+
+    return wrapper
+
 
 class GoogleRemote(ExportRemote):
 
@@ -76,14 +92,12 @@ class GoogleRemote(ExportRemote):
                 self.gauth.Authorize()
             self.drive = GoogleDrive(self.gauth)
         except:
-            self._send_traceback()
             raise RemoteError("Failed to authenticate with Google. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
 
         try:
             self.root = self._getfolder(self.prefix)
         except:
-            self._send_traceback()
-            raise RemoteError("Failed to create directory on remote. Run the command with --debug to get more information.")
+            raise RemoteError("Failed to access the remote directory. Run the command with --debug to get more information.")
 
         self.annex.setconfig('root_id', self.root['id'])
         credentials = ''.join(self.gauth.credentials.to_json().split())
@@ -104,22 +118,21 @@ class GoogleRemote(ExportRemote):
 
             self.drive = GoogleDrive(self.gauth)
         except:
-            self._send_traceback()
             raise RemoteError("Failed to authenticate with Google. Ensure that you are connected to the internet \
 or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremote <remotename>'.")
 
         try:
             self.root = self._getfolder(self.prefix)
         except:
-            self._send_traceback()
-            raise RemoteError("Failed to create directory on remote. Ensure that git-annex-remote-googledrive has been configured correctly and has permission to access your Drive.")
+            raise RemoteError("Failed to access the remote directory. Ensure that git-annex-remote-googledrive has been configured correctly and has permission to access your Drive.")
 
         if self.root['id'] != self.annex.getconfig("root_id"):
             raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
 
         credentials = ''.join(self.gauth.credentials.to_json().split())
         self.annex.setcreds('credentials', credentials, '')
-
+    
+    @remotemethod
     def transfer_store(self, key, fpath):
         if key not in self.presence_cache:
             self.checkpresent(key)
@@ -132,41 +145,32 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             try:
                 newfile.Upload()
             except:
-                self._send_traceback()
-                raise RemoteError("Upload error")
+                del self.presence_cache[key]
+                raise
             else:
                 self.presence_cache[key] = True
 
+    @remotemethod
     def transfer_retrieve(self, key, fpath):
-        try:
-            newfile = self._getfile(key)
-            newfile.GetContentFile(fpath)
-        except:
-            self._send_traceback()
-            raise RemoteError("Download error")
+        newfile = self._getfile(key)
+        newfile.GetContentFile(fpath)
     
+    @remotemethod
     def checkpresent(self, key):
-        try:
-            file_ = self._getfile(key)
-        except:
-            self._send_traceback()
-            raise RemoteError("Connection Error")
+        file_ = self._getfile(key)
+        if file_:
+            self.presence_cache[key] = True
         else:
-            if file_:
-                self.presence_cache[key] = True
-            else:
-                self.presence_cache[key] = False
-            return self.presence_cache[key]
+            self.presence_cache[key] = False
+        return self.presence_cache[key]
 
+    @remotemethod
     def remove(self, key):
-        try:
-            file_ = self._getfile(key)
-            if file_:
-                file_.Delete()
-        except:
-            self._send_traceback()
-            raise RemoteError("Error deleting key")
+        file_ = self._getfile(key)
+        if file_:
+            file_.Delete()
 
+    @remotemethod
     def transferexport_store(self, key, fpath, name):
         if name not in self.presence_cache:
             self.checkpresentexport(key, name)
@@ -182,66 +186,54 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                 newfile.SetContentFile(fpath)
             try:
                 newfile.Upload()
-            except Exception as e:
-                self._send_traceback()
-                raise RemoteError("Upload error", e)
+            except:
+                del self.presence_cache[name]
             else:
                 self.presence_cache[name] = True
 
+    @remotemethod
     def transferexport_retrieve(self, key, fpath, name):
         fileinfo = self._splitpath(name)
         parent = self._getfolder(fileinfo['path'], root=self.root, create=False)
         if not parent:
             raise RemoteError("File not present")
-        try:
-            newfile = self._getfile(fileinfo['filename'], parent=parent)
-            newfile.GetContentFile(fpath)
-        except Exception as e:
-            self._send_traceback()
-            raise RemoteError("Download error", e)
+        newfile = self._getfile(fileinfo['filename'], parent=parent)
+        newfile.GetContentFile(fpath)
             
+    @remotemethod
     def checkpresentexport(self, key, name):
         fileinfo = self._splitpath(name)
+
         parent = self._getfolder(fileinfo['path'], root=self.root, create=False)
         if not parent:
             self.presence_cache[name] = False
             return False
-
-        try:
-            file_ = self._getfile(fileinfo['filename'], parent=parent)
-        except:
-            self._send_traceback()
-            raise RemoteError("Connection Error")
+        file_ = self._getfile(fileinfo['filename'], parent=parent)
+        
+        if file_:
+            self.presence_cache[name] = True
         else:
-            if file_:
-                self.presence_cache[name] = True
-            else:
-                self.presence_cache[name] = False
-            return self.presence_cache[name]
+            self.presence_cache[name] = False
+        return self.presence_cache[name]
 
+    @remotemethod
     def removeexport(self, key, name):
         fileinfo = self._splitpath(name)
+
         parent = self._getfolder(fileinfo['path'], root=self.root, create=False)
         if not parent:
             return
+        file_ = self._getfile(fileinfo['filename'], parent=parent)
+        if file_:
+            file_.Delete()
 
-        try:
-            file_ = self._getfile(fileinfo['filename'], parent=parent)
-            if file_:
-                file_.Delete()
-        except:
-            self._send_traceback()
-            raise RemoteError("Error deleting file")
-
+    @remotemethod
     def removeexportdirectory(self, directory):
-        try:
-            file_ = self._getfolder(directory, root=self.root, create=False)
-            if file_:
-                file_.Delete()
-        except:
-            self._send_traceback()
-            raise RemoteError("Error deleting directory")
+        file_ = self._getfolder(directory, root=self.root, create=False)
+        if file_:
+            file_.Delete()
 
+    @remotemethod
     def renameexport(self, key, name, new_name):
         oldfileinfo = self._splitpath(name)
         newfileinfo = self._splitpath(new_name)
@@ -249,18 +241,14 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                                     root=self.root, create=False)
         newparent = self._getfolder(newfileinfo['path'],
                                     root=self.root, create=True)
-        try:
-            file_ = self._getfile(oldfileinfo['filename'],
-                                  parent=oldfileinfo['parent'])
-            if oldfileinfo['path'] != newfileinfo['path']:
-                file_['parents'] = [{'kind': 'drive#parentReference',
-                                    'id': newparent['id']}]
-            if oldfileinfo['filename'] != newfileinfo['filename']:
-                file_['title'] = newfileinfo['filename']
-            file_.Upload()
-        except:
-            self._send_traceback()
-            raise RemoteError("Error renaming file")
+        file_ = self._getfile(oldfileinfo['filename'],
+                              parent=oldfileinfo['parent'])
+        if oldfileinfo['path'] != newfileinfo['path']:
+            file_['parents'] = [{'kind': 'drive#parentReference',
+                                'id': newparent['id']}]
+        if oldfileinfo['filename'] != newfileinfo['filename']:
+            file_['title'] = newfileinfo['filename']
+        file_.Upload()
 
 
     def _getfile(self, filename, parent=None):
