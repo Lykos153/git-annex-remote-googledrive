@@ -92,6 +92,7 @@ class GoogleRemote(ExportRemote):
         self.gauth.SaveCredentialsFile('token.json')
         print("Setup complete. An auth token was stored in token.json. Now run 'git annex initremote' with your desired parameters. If you don't run it from the same folder, specify via token=path/to/token.json")
 
+    @remotemethod
     def initremote(self):
         self._send_version()
         self.prefix = self.annex.getconfig('prefix')
@@ -119,10 +120,20 @@ class GoogleRemote(ExportRemote):
         except:
             raise RemoteError("Failed to access the remote directory. Run the command with --debug to get more information.")
 
+        if self.annex.getconfig('exporttree') != 'yes':
+            query = "'{root_id}' in parents and \
+                     mimeType='application/vnd.google-apps.folder' and \
+                     trashed=false".format(root_id=self.root['id'])
+            file_list = self.drive.ListFile({'q': query}).GetList()
+            if len(file_list):
+                raise RemoteError("{prefix} has subdirectories. Are you sure 'prefix' is set correctly? In case you're migrating from gdrive or rclone, run 'git-annex-remote-googledrive migrate {prefix}' first.".format(prefix=self.prefix))
+        
+
         self.annex.setconfig('root_id', self.root['id'])
         credentials = ''.join(self.gauth.credentials.to_json().split())
         self.annex.setcreds('credentials', credentials, '')
 
+    @remotemethod
     def prepare(self):
         self._send_version()
         self.prefix = self.annex.getconfig('prefix')
@@ -400,8 +411,9 @@ def main():
             print(os.path.basename(__file__), get_versions()['this'])
             print("Using AnnexRemote", get_versions()['annexremote'])
             return
-
-    # redirect all non-protocol-output to stderr
+        elif sys.argv[1] == 'migrate':
+            print("Not yet implemented")
+            return
 
     output = sys.stdout
     sys.stdout = sys.stderr
