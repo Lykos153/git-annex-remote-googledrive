@@ -18,7 +18,16 @@ from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 from oauth2client.client import OAuth2Credentials
 
+from pydrive.files import ApiRequestError
+from googleapiclient.errors import HttpError
+
 from functools import wraps
+
+from tenacity import Retrying, retry
+from tenacity import retry_if_exception_type
+from tenacity import wait_exponential
+from tenacity import stop_after_attempt
+
 import annexremote
 from annexremote import Master
 from annexremote import ExportRemote
@@ -26,6 +35,17 @@ from annexremote import RemoteError
 
 versions = None
 
+retry_conditions = {
+        'wait': wait_exponential(multiplier=1, max=10),
+        'retry': (
+            retry_if_exception_type(ApiRequestError) |
+            retry_if_exception_type(HttpError) |
+            retry_if_exception_type(ConnectionResetError)
+        ),
+        'stop': stop_after_attempt(5),
+        'reraise': True,
+    }
+    
 def remotemethod(f):
     @wraps(f)
     def wrapper(self, *args, **kwargs):
@@ -133,6 +153,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
         self.annex.setcreds('credentials', credentials, '')
     
     @remotemethod
+    @retry(**retry_conditions)
     def transfer_store(self, key, fpath):
         if key not in self.presence_cache:
             self.checkpresent(key)
@@ -151,11 +172,13 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                 self.presence_cache[key] = True
 
     @remotemethod
+    @retry(**retry_conditions)
     def transfer_retrieve(self, key, fpath):
         newfile = self._getfile(key)
         newfile.GetContentFile(fpath)
     
     @remotemethod
+    @retry(**retry_conditions)
     def checkpresent(self, key):
         file_ = self._getfile(key)
         if file_:
@@ -165,12 +188,14 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
         return self.presence_cache[key]
 
     @remotemethod
+    @retry(**retry_conditions)
     def remove(self, key):
         file_ = self._getfile(key)
         if file_:
             file_.Delete()
 
     @remotemethod
+    @retry(**retry_conditions)
     def transferexport_store(self, key, fpath, name):
         if name not in self.presence_cache:
             self.checkpresentexport(key, name)
@@ -192,6 +217,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                 self.presence_cache[name] = True
 
     @remotemethod
+    @retry(**retry_conditions)
     def transferexport_retrieve(self, key, fpath, name):
         fileinfo = self._splitpath(name)
         parent = self._getfolder(fileinfo['path'], root=self.root, create=False)
@@ -201,6 +227,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
         newfile.GetContentFile(fpath)
             
     @remotemethod
+    @retry(**retry_conditions)
     def checkpresentexport(self, key, name):
         fileinfo = self._splitpath(name)
 
@@ -217,6 +244,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
         return self.presence_cache[name]
 
     @remotemethod
+    @retry(**retry_conditions)
     def removeexport(self, key, name):
         fileinfo = self._splitpath(name)
 
@@ -228,12 +256,14 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             file_.Delete()
 
     @remotemethod
+    @retry(**retry_conditions)
     def removeexportdirectory(self, directory):
         file_ = self._getfolder(directory, root=self.root, create=False)
         if file_:
             file_.Delete()
 
     @remotemethod
+    @retry(**retry_conditions)
     def renameexport(self, key, name, new_name):
         oldfileinfo = self._splitpath(name)
         newfileinfo = self._splitpath(new_name)

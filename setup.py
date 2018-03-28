@@ -76,5 +76,6 @@ setup(
     install_requires=[
           'annexremote',
           'pydrive',
+          'tenacity',
       ],
 )
