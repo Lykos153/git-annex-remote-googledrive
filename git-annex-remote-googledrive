@@ -112,7 +112,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             self.root = self._getfolder(self.prefix)
         except:
             self._send_traceback()
-            raise RemoteError("Failed to create directory on remote. Ensure that  has been configured correctly and has permission to access your Drive.")
+            raise RemoteError("Failed to create directory on remote. Ensure that git-annex-remote-googledrive has been configured correctly and has permission to access your Drive.")
 
         if self.root['id'] != self.annex.getconfig("root_id"):
             raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
