@@ -33,6 +33,7 @@ import annexremote
 from annexremote import Master
 from annexremote import ExportRemote
 from annexremote import RemoteError
+from annexremote import ProtocolError
 
 versions = None
 
