@@ -30,8 +30,11 @@ For Arch Linux, there is a package available in the [AUR](https://aur.archlinux.
    * Stores your files in a folder/prefix called `git-annex`:
 
 ```
-git annex initremote google type=external externaltype=googledrive prefix=git-annex chunk=50MiB encryption=shared mac=HMACSHA512
+git annex initremote google type=external externaltype=googledrive prefix=git-annex root_id=<some_id> chunk=50MiB encryption=shared mac=HMACSHA512
 ```
+Parameter `root_id` specifies the id of the parent folder where directory `prefix` will be created. If omitted, directory will be created a the root of the 
+user's drive.
+
 The initremote command calls out to GPG and can hang if a machine has insufficient entropy. To debug issues, use the `--debug` flag, i.e. `git-annex initremote --debug`.
 
 ## Using an existing remote (note on repository layout)

@@ -62,6 +62,9 @@ class GoogleRemote(ExportRemote):
     def initremote(self):
         self._send_version()
         self.prefix = self.annex.getconfig('prefix')
+        self.root_id = None
+        if(self.annex.getconfig('root_id')):
+            self.root_id = self.annex.getconfig('root_id')
 
         token_file = self.annex.getconfig('token') or 'token.json'
         self.gauth.LoadCredentialsFile(token_file)
@@ -83,7 +86,7 @@ class GoogleRemote(ExportRemote):
             raise RemoteError("Failed to authenticate with Google. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
 
         try:
-            self.root = self._getfolder(self.prefix)
+            self.root = self._getfolder(self.prefix, root_id=self.root_id)
         except:
             self._send_traceback()
             raise RemoteError("Failed to create directory on remote. Run the command with --debug to get more information.")
@@ -280,13 +283,15 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
         else:
             raise RemoteError ("There are two or more files named {key}".format(key=key))
     
-    def _getfolder(self, path, root=None, create=True):
+    def _getfolder(self, path, root=None, root_id=None, create=True):
         path_list = path.strip('/').split('/')
         if root:
             current_folder = root
             current_path = self.prefix
         else:
-            current_folder = self.drive.CreateFile({'id': 'root'})
+            if root_id is None:
+                root_id = 'root'
+            current_folder = self.drive.CreateFile({'id': root_id})
             current_path = ''
 
         if path == '':
