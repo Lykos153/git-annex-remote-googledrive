@@ -34,6 +34,11 @@ git annex initremote google type=external externaltype=googledrive prefix=git-an
 ```
 The initremote command calls out to GPG and can hang if a machine has insufficient entropy. To debug issues, use the `--debug` flag, i.e. `git-annex initremote --debug`.
 
+`prefix` is the name of the folder that will be created for the annex. By default, 
+it will be created at the root of the user's Drive (id='root') and the remote won't be accessible by
+other Google users. To address that, you can pass the id 
+of a parent folder with option `parent_folder_id`.
+
 ## Using an existing remote (note on repository layout)
 
 If you're switching from git-annex-remote-rclone or git-annex-remote-gdrive and already using the `nodir` structure, 
