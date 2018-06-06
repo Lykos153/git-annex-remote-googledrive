@@ -106,7 +106,7 @@ class GoogleRemote(ExportRemote):
             else:
                 self.gauth.Authorize()
             self.drive = GoogleDrive(self.gauth)
-            self.root = self._getfolder(self.prefix, create=False)
+            self.root = self._getfolder(self.prefix, parent_folder_id=self.parent_folder_id, create=False)
         except:
             raise RemoteError("Failed to access the remote directory. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
 
@@ -152,7 +152,14 @@ class GoogleRemote(ExportRemote):
     @remotemethod
     def initremote(self):
         self._send_version()
+        # - prefix is the name of the folder that will be created to store
+        # the annex.
+        # - root_id will be the gdrive id of this folder when created.
         self.prefix = self.annex.getconfig('prefix')
+        # - parent_folder_id is the gdrive id of the folder where folder 'prefix' will be created
+        #   if undefined, folder 'prefix' folder will be created at the root of
+        #   the user's drive.
+        self.parent_folder_id = self.annex.getconfig('parent_folder_id')
         if self.prefix == '' or self.prefix == '/':
             raise RemoteError("prefix must not be empty.")
 
@@ -175,7 +182,7 @@ class GoogleRemote(ExportRemote):
             raise RemoteError("Failed to authenticate with Google. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
 
         try:
-            self.root = self._getfolder(self.prefix)
+            self.root = self._getfolder(self.prefix, parent_folder_id=self.parent_folder_id)
         except:
             raise RemoteError("Failed to access the remote directory. Run the command with --debug to get more information.")
 
@@ -196,6 +203,7 @@ class GoogleRemote(ExportRemote):
     def prepare(self):
         self._send_version()
         self.prefix = self.annex.getconfig('prefix')
+        self.parent_folder_id = self.annex.getconfig('parent_folder_id')
         credentials = self.annex.getcreds('credentials')['user']
 
         try:
@@ -212,7 +220,7 @@ class GoogleRemote(ExportRemote):
 or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremote <remotename>'.")
 
         try:
-            self.root = self._getfolder(self.prefix)
+            self.root = self._getfolder(self.prefix, parent_folder_id=self.parent_folder_id)
         except:
             raise RemoteError("Failed to access the remote directory. Ensure that git-annex-remote-googledrive has been configured correctly and has permission to access your Drive.")
 
@@ -394,13 +402,15 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
         else:
             raise RemoteError ("There are two or more files named {}".format(key))
     
-    def _getfolder(self, path, root=None, create=True):
+    def _getfolder(self, path, root=None, create=True, parent_folder_id='root'):
+        if parent_folder_id == '':
+            parent_folder_id = 'root'
         path_list = path.strip('/').split('/')
         if root:
             current_folder = root
             current_path = self.prefix
         else:
-            current_folder = self.drive.CreateFile({'id': 'root'})
+            current_folder = self.drive.CreateFile({'id': parent_folder_id})
             current_path = ''
 
         if path == '':
