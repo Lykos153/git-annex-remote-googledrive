@@ -159,6 +159,8 @@ class GoogleRemote(ExportRemote):
 
         token_file = self.annex.getconfig('token') or 'token.json'
         self.gauth.LoadCredentialsFile(token_file)
+        if self.annex.getconfig('keep_token') != 'yes':
+            os.remove(token_file)
 
         if self.gauth.credentials is None:
             credentials = self.annex.getcreds('credentials')['user']
