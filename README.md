@@ -35,10 +35,17 @@ git annex initremote google type=external externaltype=googledrive prefix=git-an
 The initremote command calls out to GPG and can hang if a machine has insufficient entropy. To debug issues, use the `--debug` flag, i.e. `git-annex initremote --debug`.
 
 ### Options
-* `prefix` The path to the folder that will be used for the remote. If it doesn't exist, it will be created.
-* `root_id` Instead of the path, you can specify the ID of a folder. The folder must already exist. This will make it independent from the path and it will always be found be git-annex, no matter where you move it. Can also be used to access shared folders which you haven't added to "My Drive".
-* `token` Path to the file in which the credentials were stored by `git-annex-remote-googledrive setup`. Default: token.json
-* `keep_token` Set to `yes` if you would like to keep the token file. Otherwise it's removed during initremote. Default: no
+Options specific to git-annex-remote-googledrive
+* `prefix` - The path to the folder that will be used for the remote. If it doesn't exist, it will be created.
+* `root_id` - Instead of the path, you can specify the ID of a folder. The folder must already exist. This will make it independent from the path and it will always be found be git-annex, no matter where you move it. Can also be used to access shared folders which you haven't added to "My Drive".
+* `token` - Path to the file in which the credentials were stored by `git-annex-remote-googledrive setup`. Default: token.json
+* `keep_token` - Set to `yes` if you would like to keep the token file. Otherwise it's removed during initremote. Default: no
+
+General git-annex options
+* `encryption` - One of "none", "hybrid", "shared", or "pubkey". See [encryption](https://git-annex.branchable.com/encryption/).
+* `keyid` - Specifies the gpg key to use for encryption.
+* `exporttree` - Set to `yes` to make this special remote usable by git-annex-export. It will not be usable as a general-purpose special remote.
+* `chunk` - Enables [chunking](https://git-annex.branchable.com/chunking) when storing large files.
 
 ## Using an existing remote (note on repository layout)
 
