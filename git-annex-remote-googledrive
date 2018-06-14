@@ -153,8 +153,9 @@ class GoogleRemote(ExportRemote):
     def initremote(self):
         self._send_version()
         self.prefix = self.annex.getconfig('prefix')
-        if self.prefix == '' or self.prefix == '/':
-            raise RemoteError("prefix must not be empty.")
+        root_id = self.annex.getconfig('root_id')
+        if not self.prefix and not root_id:
+            raise RemoteError("Either prefix or root_id must be given.")
 
         token_file = self.annex.getconfig('token') or 'token.json'
         self.gauth.LoadCredentialsFile(token_file)
@@ -175,7 +176,11 @@ class GoogleRemote(ExportRemote):
             raise RemoteError("Failed to authenticate with Google. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
 
         try:
-            self.root = self._getfolder(self.prefix)
+            if self.prefix:
+                self.root = self._getfolder(self.prefix)
+            else:
+                self.root = self.drive.CreateFile({'id': root_id})
+                self.root.FetchMetadata()
         except:
             raise RemoteError("Failed to access the remote directory. Run the command with --debug to get more information.")
 
@@ -196,6 +201,7 @@ class GoogleRemote(ExportRemote):
     def prepare(self):
         self._send_version()
         self.prefix = self.annex.getconfig('prefix')
+        root_id = self.annex.getconfig('root_id')
         credentials = self.annex.getcreds('credentials')['user']
 
         try:
@@ -211,13 +217,22 @@ class GoogleRemote(ExportRemote):
             raise RemoteError("Failed to authenticate with Google. Ensure that you are connected to the internet \
 or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremote <remotename>'.")
 
-        try:
-            self.root = self._getfolder(self.prefix)
-        except:
-            raise RemoteError("Failed to access the remote directory. Ensure that git-annex-remote-googledrive has been configured correctly and has permission to access your Drive.")
+        
+        if self.prefix:
+            try:
+                self.root = self._getfolder(self.prefix, create=False)
+            except:
+                raise RemoteError("Failed to access the remote directory {prefix}. Was the repo moved?.".format(prefix=prefix))
+            if self.root['id'] != root_id:
+                raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
 
-        if self.root['id'] != self.annex.getconfig("root_id"):
-            raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
+        else:
+            self.root = self.drive.CreateFile({'id': root_id})
+            try:
+                self.root.FetchMetadata()
+            except:
+                raise RemoteError("Failed to access the remote directory with id {root_id}. Ensure that git-annex-remote-googledrive has been configured correctly and has permission to access the folder.".format(root_id=root_id))
+            
 
         credentials = ''.join(self.gauth.credentials.to_json().split())
         self.annex.setcreds('credentials', credentials, '')
@@ -403,7 +418,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             current_folder = self.drive.CreateFile({'id': 'root'})
             current_path = ''
 
-        if path == '':
+        if path_list == ['']:
             return current_folder
         for folder in path_list:
             current_path = '/'.join([current_path, folder])
