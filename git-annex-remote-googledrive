@@ -287,8 +287,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             self.checkpresentexport(key, name)
         if not self.presence_cache[name]:
             fileinfo = self._splitpath(name)
-            parent = self._getfolder(fileinfo['path'], root=self.root,
-                    create=True)
+            parent = self._getsubfolder(fileinfo['path'], create=True)
             newfile = \
                 self.drive.CreateFile({
                             'title': fileinfo['filename'],
@@ -311,7 +310,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
     @retry(**retry_conditions)
     def transferexport_retrieve(self, key, fpath, name):
         fileinfo = self._splitpath(name)
-        parent = self._getfolder(fileinfo['path'], root=self.root, create=False)
+        parent = self._getsubfolder(fileinfo['path'], create=False)
         if not parent:
             raise RemoteError("File not present")
         newfile = self._getfile(fileinfo['filename'], parent=parent)
@@ -322,7 +321,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
     def checkpresentexport(self, key, name):
         fileinfo = self._splitpath(name)
 
-        parent = self._getfolder(fileinfo['path'], root=self.root, create=False)
+        parent = self._getsubfolder(fileinfo['path'], create=False)
         if not parent:
             self.presence_cache[name] = False
             return False
@@ -344,7 +343,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
     def removeexport(self, key, name):
         fileinfo = self._splitpath(name)
 
-        parent = self._getfolder(fileinfo['path'], root=self.root, create=False)
+        parent = self._getsubfolder(fileinfo['path'], create=False)
         if not parent:
             return
         file_ = self._getfile(fileinfo['filename'], parent=parent)
@@ -354,7 +353,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
     @remotemethod
     @retry(**retry_conditions)
     def removeexportdirectory(self, directory):
-        file_ = self._getfolder(directory, root=self.root, create=False)
+        file_ = self._getsubfolder(directory, create=False)
         if file_:
             file_.Delete()
 
@@ -363,10 +362,8 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
     def renameexport(self, key, name, new_name):
         oldfileinfo = self._splitpath(name)
         newfileinfo = self._splitpath(new_name)
-        oldparent = self._getfolder(oldfileinfo['path'],
-                                    root=self.root, create=False)
-        newparent = self._getfolder(newfileinfo['path'],
-                                    root=self.root, create=True)
+        oldparent = self._getsubfolder(oldfileinfo['path'], create=False)
+        newparent = self._getsubfolder(newfileinfo['path'], create=True)
         file_ = self._getfile(oldfileinfo['filename'],
                               parent=oldfileinfo['parent'])
         if oldfileinfo['path'] != newfileinfo['path']:
@@ -393,6 +390,9 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             return None
         else:
             raise RemoteError ("There are two or more files named {}".format(key))
+            
+    def _getsubfolder(self, path, create=True):
+        return self._getfolder(path, root=self.root, create=create)
     
     def _getfolder(self, path, root=None, create=True):
         path_list = path.strip('/').split('/')
