@@ -7,8 +7,7 @@ git-annex-remote-googledrive adds direct and fast support for Google Drive to gi
 * [exporttree remotes](https://git-annex.branchable.com/git-annex-export)
 * storing the credentials within the repository
 * using different Google accounts simultaniously (even within the same repository)
-* being even faster by keeping the HTTP connection open
-* ...
+* ... a lot more to come, see [Issues](https://github.com/Lykos153/git-annex-remote-googledrive/issues)
 
 ## Installation
 `pip3 install git-annex-remote-googledrive`
@@ -34,28 +33,25 @@ The initremote command calls out to GPG and can hang if a machine has insufficie
 ### Options
 Options specific to git-annex-remote-googledrive
 * `prefix` - The path to the folder that will be used for the remote. If it doesn't exist, it will be created.
-* `root_id` - Instead of the path, you can specify the ID of a folder. The folder must already exist. This will make it independent from the path and it will always be found be git-annex, no matter where you move it. Can also be used to access shared folders which you haven't added to "My Drive".
+* `root_id` - Instead of the path, you can specify the ID of a folder. The folder must already exist. This will make it independent from the path and it will always be found by git-annex, no matter where you move it. Can also be used to access shared folders which you haven't added to "My Drive".
 * `token` - Path to the file in which the credentials were stored by `git-annex-remote-googledrive setup`. Default: token.json
 * `keep_token` - Set to `yes` if you would like to keep the token file. Otherwise it's removed during initremote. Default: no
 
 General git-annex options
 * `encryption` - One of "none", "hybrid", "shared", or "pubkey". See [encryption](https://git-annex.branchable.com/encryption/).
 * `keyid` - Specifies the gpg key to use for encryption.
+* `mac` - The MAC algorithm. See [encryption](https://git-annex.branchable.com/encryption/).
 * `exporttree` - Set to `yes` to make this special remote usable by git-annex-export. It will not be usable as a general-purpose special remote.
 * `chunk` - Enables [chunking](https://git-annex.branchable.com/chunking) when storing large files.
 
 ## Using an existing remote (note on repository layout)
 
 If you're switching from git-annex-remote-rclone or git-annex-remote-gdrive and already using the `nodir` structure, 
-it's as simple as typing `git annex enableremote <remote_name> externaltype=googledrive`. I decided not to
-support other layouts anymore as there is really no reason to have subfolders. Google Drive requires us to traverse
-the whole path on each file operation, which results in a noticeable performance loss
-(especially during upload of chunked files). On the other hand, it's perfectly fine to have thousands of
-files in one Google Drive folder as it doesn't event use a folder structure internally.
+it's as simple as typing `git annex enableremote <remote_name> externaltype=googledrive`. If you were using a different structure, you will be notified to run `git-annex-remote-googledrive migrate <prefix>` in order to migrate your remote to a `nodir` structure.
 
-So if your remote has a layout with subfolders, use the 
-[migrator script](https://github.com/Lykos153/git-annex-remote-gdrive/tree/master/migrations). You can use the remote
-while migrating with the [bash based git-annex-remote-gdrive](https://github.com/Lykos153/git-annex-remote-gdrive)
+If you have a huge remote and the migration takes very long, you can temporarily use the [bash based git-annex-remote-gdrive](https://github.com/Lykos153/git-annex-remote-gdrive) which can access the files during migration. I might add this functionality to this application as well ([#25](https://github.com/Lykos153/git-annex-remote-googledrive/issues/25)). 
+
+I decided not to support other layouts anymore as there is really no reason to have subfolders. Google Drive requires us to traverse the whole path on each file operation, which results in a noticeable performance loss (especially during upload of chunked files). On the other hand, it's perfectly fine to have thousands of files in one Google Drive folder as it doesn't even use a folder structure internally.
 
 ## Choosing a Chunk Size
 
