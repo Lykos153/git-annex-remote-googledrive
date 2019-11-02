@@ -490,8 +490,8 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
         try:
             self.annex.info(message)
         except ProtocolError:
-            self.annex.debug(message)
-            
+            print(message, file=sys.stderr)
+    
     def _get_key_info(self, key, field):
         if key not in self.state_cache or field not in self.state_cache[key]:
             try:
