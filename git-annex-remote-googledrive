@@ -83,6 +83,12 @@ class GoogleRemote(ExportRemote):
             }
 
     def setup(self):
+        print("======")
+        print("IMPORTANT: Google has started to lockdown their Google Drive API. This might affect access to your remotes.")
+        print("Until this is settled you'll see a warning about this application not being verified by Google which you need to accept in order to proceed.")
+        print("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
+        print("======")
+
         if os.path.isfile('token.json'):
             try:
                 self.gauth.LoadCredentialsFile('token.json')
@@ -210,6 +216,14 @@ class GoogleRemote(ExportRemote):
         self.prefix = self.annex.getconfig('prefix')
         root_id = self.annex.getconfig('root_id')
         credentials = self.annex.getcreds('credentials')['user']
+
+        if self.annex.getconfig('mute-api-lockdown-warning') != "true":
+            self._info("====== git-annex-remote-googledrive")
+            self._info("IMPORTANT: Google has started to lockdown their Google Drive API. This might affect access to your Google Drive remotes.")
+            self._info("Please consider untrusting this remote until it is clear what happends next.")
+            self._info("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
+            self._info("You can mute this warning by issuing 'git annex enableremote <remote-name> mute-api-lockdown-warning=true")
+            self._info("======")
 
         try:
             self.gauth.credentials = \

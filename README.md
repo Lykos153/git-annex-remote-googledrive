@@ -2,6 +2,8 @@
 
 git-annex-remote-googledrive adds direct and fast support for Google Drive to git-annex and comes with some awesome new features.
 
+**IMPORTANT:** Google has started to lockdown their Google Drive API. This might affect access to your remotes. See [Google Drive API lockdown](https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown)
+
 ## Features
 
 * [exporttree remotes](https://git-annex.branchable.com/git-annex-export)
@@ -61,6 +63,13 @@ Smaller chunk sizes: leak less information about the size of file size of files 
 and require less data to be re-transmitted when network connectivity is interrupted. Larger chunks require less round
 trips to and from your cloud provider and may be faster. Additional discussion about chunk size can be found
 [here](https://git-annex.branchable.com/chunking/) and [here](https://github.com/DanielDent/git-annex-remote-rclone/issues/1)
+
+## Google Drive API lockdown
+Google has started to lockdown their Google Drive API in order to [enhance security controls](https://cloud.google.com/blog/products/identity-security/enhancing-security-controls-for-google-drive-third-party-apps) for the user. Developers are urged to "move to a per-file user consent model, allowing users to more precisely determine what files an app is allowed to access". Unfortunately they do not provide a way for a user to allow access to a specific folder, so git-annex-remote-googledrive still needs access to the entire Drive in order to function properly. This makes it necessary to get it verified by Google. Until the application is approved (IF it is approved), the OAuth consent screen will show a warning ([#31](https://github.com/Lykos153/git-annex-remote-googledrive/issues/31)) which the user needs to accept in order to proceed.
+
+It is not yet clear what will happen in case the application is not approved. The warning screen might be all. But it's also possible that git-annex-remote-googledrive is banned from accessing Google Drive in the beginning of 2020. If you want to prepare for this, it might be a good idea to look for a different cloud service. However, it seems that [rclone](https://rclone.org) got approved, so you'll be able to switch to [git-annex-remote-rclone](https://github.com/DanielDent/git-annex-remote-rclone) in case git-annex-remote-googledrive is banned. To do this, follow the steps described in its README, then type `git annex enableremote <remote_name> externaltype=rclone rclone_layout=nodir`. This will not work for export-remotes, however, as git-annex-remote-rclone doesn't support them.
+
+If you use git-annex-remote-googledrive to sync with a **GSuite account**, you're on the safe side. The GSuite admin can choose which applications have access to its drive, regardless of whether it got approved by Google or not.
 
 ## Issues, Contributing
 
