@@ -225,7 +225,7 @@ class GoogleRemote(ExportRemote):
             self._info("IMPORTANT: Google has started to lockdown their Google Drive API. This might affect access to your Google Drive remotes.")
             self._info("Please consider untrusting this remote until it is clear what happends next.")
             self._info("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
-            self._info("You can mute this warning by issuing 'git annex enableremote <remote-name> mute-api-lockdown-warning=true")
+            self._info("You can mute this warning by issuing 'git annex enableremote <remote-name> mute-api-lockdown-warning=true'")
             self._info("======")
 
         try:
