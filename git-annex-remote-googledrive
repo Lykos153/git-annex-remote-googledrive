@@ -83,14 +83,19 @@ class GoogleRemote(ExportRemote):
             }
 
     def setup(self):
-        self.gauth.LoadCredentialsFile('token.json')
+        if os.path.isfile('token.json'):
+            try:
+                self.gauth.LoadCredentialsFile('token.json')
+            except:
+                pass
 
         if self.gauth.credentials is None:
             self.gauth.CommandLineAuth()
-        elif self.gauth.access_token_expired:
-            self.gauth.Refresh()
         else:
-            self.gauth.Authorize()
+            try:
+                self.gauth.Refresh()
+            except:
+                self.gauth.Authorize()
 
         self.gauth.SaveCredentialsFile('token.json')
         print("Setup complete. An auth token was stored in token.json. Now run 'git annex initremote' with your desired parameters. If you don't run it from the same folder, specify via token=path/to/token.json")
