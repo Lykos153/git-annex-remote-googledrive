@@ -16,7 +16,9 @@ import os, sys, traceback
 import json
 
 from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
+from drive import GoogleDrive
+from drive import DriveFile
+from drive import DriveFolder
 from oauth2client.client import OAuth2Credentials
 
 from pydrive.files import ApiRequestError
@@ -71,16 +73,18 @@ class GoogleRemote(ExportRemote):
         self.folder_cache = dict()
         self.state_cache = dict()
 
-        self.gauth = GoogleAuth()
-        self.gauth.settings['client_config_backend'] = 'settings'
-        self.gauth.settings['client_config'] = {
-            'client_id': '275666578511-ndjt6mkns3vgb60cbo7csrjn6mbh8gbf.apps.googleusercontent.com',
-            'client_secret': 'Den2tu08pRU4s5KeCp5whas_',
-            'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
-            'token_uri': 'https://accounts.google.com/o/oauth2/token',
-            'revoke_uri': None,
-            'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob',
-            }
+        self.gauth = json.dumps({
+                        'installed':
+                        {
+                            'client_id': '275666578511-ndjt6mkns3vgb60cbo7csrjn6mbh8gbf.apps.googleusercontent.com',
+                            'client_secret': 'Den2tu08pRU4s5KeCp5whas_',
+                            'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
+                            'token_uri': 'https://accounts.google.com/o/oauth2/token',
+                            'revoke_uri': None,
+                            'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob',
+                        }
+                    })
+            
 
     def setup(self):
         print("======")
@@ -89,75 +93,54 @@ class GoogleRemote(ExportRemote):
         print("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
         print("======")
 
-        if os.path.isfile('token.json'):
-            try:
-                self.gauth.LoadCredentialsFile('token.json')
-            except:
-                pass
+        try:
+            with open("token.json", 'r') as fp:
+                creds = fp.read()
+        except:
+            creds = None
 
-        if self.gauth.credentials is None:
-            self.gauth.CommandLineAuth()
-        else:
-            try:
-                self.gauth.Refresh()
-            except:
-                self.gauth.Authorize()
-
-        self.gauth.SaveCredentialsFile('token.json')
+        self.drive = GoogleDrive(self.gauth, creds)
+        creds = self.drive.auth()
+        with open("token.json", 'w') as fp:
+            fp.write(creds)
+        #TODO: Store the token in the .git folder
         print("Setup complete. An auth token was stored in token.json. Now run 'git annex initremote' with your desired parameters. If you don't run it from the same folder, specify via token=path/to/token.json")
          
     def migrate(self, prefix):
         self.prefix = prefix
-        token_file = 'token.json'
-        self.gauth.LoadCredentialsFile(token_file)
-
+        with open("token.json", 'r') as fp:
+            creds = fp.read()
+        self.drive = GoogleDrive(self.gauth, creds)
+        
         try:
-            if self.gauth.access_token_expired:
-                self.gauth.Refresh()
-            else:
-                self.gauth.Authorize()
-            self.drive = GoogleDrive(self.gauth)
-            self.root = self._getfolder(self.prefix, create=False)
+            self.drive.connect()
         except:
             raise RemoteError("Failed to access the remote directory. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
 
-        if not self.root:
+        try:
+            self.root = self.drive.child_from_path(self.prefix)
+        except FileNotFoundError:
             raise RemoteError("'{}' does not exist on the remote.".format(prefix))
-
-        if (self.root == self.drive.CreateFile({'id': 'root'})):
-            raise RemoteError("Root is not an allowed prefix")
             
         self.migration_count = {'moved':0, 'deleted':0}
         self._migration_traverse(self.root, self.prefix)
         
     @retry(wait=wait_fixed(2), retry=retry_conditions['retry'])   
     def _migration_traverse(self, current_folder, current_path):
+        #TODO: Use batch requests
         if current_folder == self.root:
-            query = "'{}' in parents and \
-                     mimeType='application/vnd.google-apps.folder' and \
-                     trashed=false".format(current_folder['id'])
-            for file_list in self.drive.ListFile({
-                        'q': query , 
-                        'maxResults': 100, 
-                        'orderBy': 'title'}):
-                for file_ in file_list:
-                    self._migration_traverse(file_, current_path+"/"+file_['title'])
+            for subfolder in current_folder.children(files=False):
+                self._migration_traverse(subfolder, current_path+"/"+subfolder.name)
         else:
-            query = "'{}' in parents and trashed=false".format(current_folder['id'])
-            for file_list in self.drive.ListFile({
-                            'q': query,
-                            'maxResults': 100,
-                            'orderBy': 'title'}):
-                for file_ in file_list:
-                    if file_['mimeType'] == 'application/vnd.google-apps.folder':
-                        self._migration_traverse(file_, current_path+"/"+file_['title'])
-                    else:
-                        print ( "Moving {}/{}".format(current_path,file_['title']) )
-                        file_['parents'] = [{'kind': 'drive#parentReference', 'id': self.root['id']}]
-                        file_.Upload()
-                        self.migration_count['moved'] += 1
+            for file_ in current_folder.children():
+                if isinstance(file_, DriveFolder):
+                    self._migration_traverse(file_, current_path+"/"+file.name)
+                else:
+                    print ( "Moving {}/{}".format(current_path,file_.name) )
+                    file_.move(self.root)
+                    self.migration_count['moved'] += 1
             print ("Deleting folder {}".format(current_path))
-            current_folder.Delete()
+            current_folder.remove()
             self.migration_count['deleted'] += 1
 
     @remotemethod
