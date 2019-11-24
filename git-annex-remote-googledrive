@@ -19,7 +19,9 @@ from pydrive.auth import GoogleAuth
 from drive import GoogleDrive
 from drive import DriveFile
 from drive import DriveFolder
+from drive import NotAuthenticatedError
 from oauth2client.client import OAuth2Credentials
+from google.auth.exceptions import RefreshError
 
 from pydrive.files import ApiRequestError
 from googleapiclient.errors import HttpError
@@ -36,6 +38,9 @@ from annexremote import Master
 from annexremote import ExportRemote
 from annexremote import RemoteError
 from annexremote import ProtocolError
+
+def NotAFolderError(Exception):
+    pass
 
 versions = None
 
@@ -152,49 +157,52 @@ class GoogleRemote(ExportRemote):
             raise RemoteError("Either prefix or root_id must be given.")
 
         token_file = self.annex.getconfig('token') or 'token.json'
-        self.gauth.LoadCredentialsFile(token_file)
+        try:
+            with open(token_file, 'r') as fp:
+                creds = fp.read()
+        except:
+            creds = None
         if self.annex.getconfig('keep_token') != 'yes':
             try:
                 os.remove(token_file)
             except:
                 pass
 
-        if self.gauth.credentials is None:
-            credentials = self.annex.getcreds('credentials')['user']
-            if credentials:
-                self.gauth.credentials = \
-                    OAuth2Credentials.from_json(credentials)
+        if creds is None:
+            creds = self.annex.getcreds('credentials')['user']
+            if not creds:
+                raise RemoteError("No Credentials found. Run 'git-annex-remote-googledrive setup' in order to authenticate.")
 
+        self.drive = GoogleDrive(self.gauth, creds)
         try:
-            if self.gauth.access_token_expired:
-                self.gauth.Refresh()
-            else:
-                self.gauth.Authorize()
-            self.drive = GoogleDrive(self.gauth)
+            self.drive.connect()
+        except (NotAuthenticatedError, RefreshError):
+            raise RemoteError("Failed to authenticate with Google. Please run 'git-annex-remote-googledrive setup'.")
         except:
-            raise RemoteError("Failed to authenticate with Google. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
+            raise RemoteError("Failed to connect with Google. Please check your internet connection.")
 
-        try:
-            if self.prefix:
-                self.root = self._getfolder(self.prefix)
-            else:
-                self.root = self.drive.CreateFile({'id': root_id})
-                self.root.FetchMetadata()
-        except:
-            raise RemoteError("Failed to access the remote directory. Run the command with --debug to get more information.")
+        if self.prefix:
+            try:
+                self.root = self.drive.child_from_path(self.prefix)
+            except FileNotFoundError:
+                raise RemoteError("Prefix {} not found.".format(prefix))
+        else:
+            try:
+                self.root = self.drive.item_by_id(root_id)
+            except FileNotFoundError:
+                raise RemoteError("File id {} does not exist.".format(root_id))
+
+        if not isinstance(self.root, DriveFolder):
+            raise RemoteError("Specified prefix or id does not point to a folder.")
 
         if self.annex.getconfig('exporttree') != 'yes':
-            query = "'{root_id}' in parents and \
-                     mimeType='application/vnd.google-apps.folder' and \
-                     trashed=false".format(root_id=self.root['id'])
-            file_list = self.drive.ListFile({'q': query}).GetList()
+            file_list = list(self.root.children(files=False))
             if len(file_list):
-                raise RemoteError("{prefix} has subdirectories. Are you sure 'prefix' is set correctly? In case you're migrating from gdrive or rclone, run 'git-annex-remote-googledrive migrate {prefix}' first.".format(prefix=self.prefix))
+                raise RemoteError("{prefix} has subdirectories. Are you sure 'prefix' or 'id' is set correctly? In case you're migrating from gdrive or rclone, run 'git-annex-remote-googledrive migrate {prefix}' first.".format(prefix=self.prefix))
         
 
-        self.annex.setconfig('root_id', self.root['id'])
-        credentials = ''.join(self.gauth.credentials.to_json().split())
-        self.annex.setcreds('credentials', credentials, '')
+        self.annex.setconfig('root_id', self.root.id)
+        self.annex.setcreds('credentials', self.drive.json_creds(), '')
 
     @remotemethod
     def prepare(self):
