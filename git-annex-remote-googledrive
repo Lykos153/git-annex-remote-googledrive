@@ -202,7 +202,8 @@ class GoogleRemote(ExportRemote):
         
 
         self.annex.setconfig('root_id', self.root.id)
-        self.annex.setcreds('credentials', self.drive.json_creds(), '')
+        credentials = ''.join(self.drive.json_creds().split())
+        self.annex.setcreds('credentials', credentials, '')
 
     @remotemethod
     def prepare(self):
@@ -219,49 +220,46 @@ class GoogleRemote(ExportRemote):
             self._info("You can mute this warning by issuing 'git annex enableremote <remote-name> mute-api-lockdown-warning=true'")
             self._info("======")
 
+        self.drive = GoogleDrive(self.gauth, credentials)
         try:
-            self.gauth.credentials = \
-                OAuth2Credentials.from_json(credentials)
-            if self.gauth.access_token_expired:
-                self.gauth.Refresh()
-            else:
-                self.gauth.Authorize()
-
-            self.drive = GoogleDrive(self.gauth)
-        except:
+            self.drive.connect()
+        except (NotAuthenticatedError, RefreshError):
             raise RemoteError("Failed to authenticate with Google. Ensure that you are connected to the internet \
-or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremote <remotename>'.")
+or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremote <remotename>.")
+        except:
+            raise RemoteError("Failed to connect with Google. Please check your internet connection.")
 
         
         if self.prefix:
             try:
-                self.root = self._getfolder(self.prefix, create=False)
-            except:
+                self.root = self.drive.child_from_path(self.prefix)
+            except FileNotFoundError:
                 raise RemoteError("Failed to access the remote directory {prefix}. Was the repo moved?.".format(prefix=prefix))
-            if self.root['id'] != root_id:
+            if self.root.id != root_id:
                 raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
-
         else:
-            self.root = self.drive.CreateFile({'id': root_id})
             try:
-                self.root.FetchMetadata()
-            except:
+                self.root = self.drive.item_by_id(root_id)
+            except FileNotFoundError:
                 raise RemoteError("Failed to access the remote directory with id {root_id}. Ensure that git-annex-remote-googledrive has been configured correctly and has permission to access the folder.".format(root_id=root_id))
-            
 
-        credentials = ''.join(self.gauth.credentials.to_json().split())
+        if not isinstance(self.root, DriveFolder):
+            raise RemoteError("Specified prefix or id does not point to a folder.")
+
+        credentials = ''.join(self.drive.json_creds().split())
         self.annex.setcreds('credentials', credentials, '')
         
         # Clean up test keys
         query = "'{root_id}' in parents and \
                  title contains 'this-is-a-test-key'".format(
-                    root_id=self.root['id']
+                    root_id=self.root.id
                  )
-        file_list = self.drive.ListFile({'q': query}).GetList()
+
+        file_list = list(self.drive.items_by_query(query))
         if len(file_list):
             self._info("Info: Cleaning up test keys")
         for file_ in file_list:
-            file_.Delete()
+            file_.remove()
     
     
     @remotemethod
