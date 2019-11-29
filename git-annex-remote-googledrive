@@ -25,6 +25,7 @@ from google.auth.exceptions import RefreshError
 
 from pydrive.files import ApiRequestError
 from googleapiclient.errors import HttpError
+from json.decoder import JSONDecodeError
 
 from functools import wraps
 
@@ -115,7 +116,11 @@ class GoogleRemote(ExportRemote):
         self.prefix = prefix
         with open("token.json", 'r') as fp:
             creds = fp.read()
-        self.drive = GoogleDrive(self.gauth, creds)
+        try:
+            self.drive = GoogleDrive(self.gauth, creds)
+        except JSONDecodeError:
+            raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
+        
         
         try:
             self.drive.connect()
@@ -173,7 +178,11 @@ class GoogleRemote(ExportRemote):
             if not creds:
                 raise RemoteError("No Credentials found. Run 'git-annex-remote-googledrive setup' in order to authenticate.")
 
-        self.drive = GoogleDrive(self.gauth, creds)
+        try:
+            self.drive = GoogleDrive(self.gauth, creds)
+        except JSONDecodeError:
+            raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
+        
         try:
             self.drive.connect()
         except (NotAuthenticatedError, RefreshError):
@@ -219,8 +228,11 @@ class GoogleRemote(ExportRemote):
             self._info("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
             self._info("You can mute this warning by issuing 'git annex enableremote <remote-name> mute-api-lockdown-warning=true'")
             self._info("======")
-
-        self.drive = GoogleDrive(self.gauth, credentials)
+        try:
+            self.drive = GoogleDrive(self.gauth, credentials)
+        except JSONDecodeError:
+            raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
+        
         try:
             self.drive.connect()
         except (NotAuthenticatedError, RefreshError):
