@@ -280,45 +280,37 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
         if key not in self.presence_cache:
             self.checkpresent(key)
         if not self.presence_cache[key]:
-            newfile = self.drive.CreateFile({
-                            'title': key,
-                            'parents': [{
-                                'kind': 'drive#parentReference',
-                                'id': self.root['id']
-                            }],
-                        })
+            newfile = self.root.new_file(key)
             if os.path.getsize(fpath):
-                newfile.SetContentFile(fpath)
-            try:
-                newfile.Upload()
-            except:
-                del self.presence_cache[key]
-                raise
+                newfile.upload(fpath)
             else:
-                self.presence_cache[key] = True
+                newfile.upload_empty()
+            self.presence_cache[key] = True
 
     @remotemethod
     @retry(**retry_conditions)
     def transfer_retrieve(self, key, fpath):
-        newfile = self._getfile(key)
-        newfile.GetContentFile(fpath)
+        newfile = self.root.child(key)
+        newfile.download(fpath)
     
     @remotemethod
     @retry(**retry_conditions)
     def checkpresent(self, key):
-        file_ = self._getfile(key)
-        if file_:
+        try:
+            file_ = self.root.child(key, folders=False)
             self.presence_cache[key] = True
-        else:
+        except FileNotFoundError:
             self.presence_cache[key] = False
         return self.presence_cache[key]
 
     @remotemethod
     @retry(**retry_conditions)
     def remove(self, key):
-        file_ = self._getfile(key)
-        if file_:
-            file_.Delete()
+        try:
+            file_ = self.root.child(key)
+            file_.remove()
+        except FileNotFoundError:
+            pass
 
     @remotemethod
     @retry(**retry_conditions)
