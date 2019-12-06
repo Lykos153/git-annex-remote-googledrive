@@ -263,7 +263,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
         
         # Clean up test keys
         query = "'{root_id}' in parents and \
-                 title contains 'this-is-a-test-key'".format(
+                 name contains 'this-is-a-test-key'".format(
                     root_id=self.root.id
                  )
 
