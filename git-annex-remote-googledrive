@@ -77,6 +77,7 @@ class GoogleRemote(ExportRemote):
         super().__init__(annex)
         self.presence_cache = dict()
         self.state_cache = dict()
+        self.chunksize = 1024**2*5
 
         self.gauth = json.dumps({
                         'installed':
@@ -281,7 +282,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
         if not self.presence_cache[key]:
             newfile = self.root.new_file(key)
             if os.path.getsize(fpath):
-                newfile.upload(fpath)
+                newfile.upload(fpath, chunksize=self.chunksize, progress_handler=self.annex.progress)
             else:
                 newfile.upload_empty()
             self.presence_cache[key] = True
@@ -290,7 +291,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
     @retry(**retry_conditions)
     def transfer_retrieve(self, key, fpath):
         newfile = self.root.child(key)
-        newfile.download(fpath)
+        newfile.download(fpath, chunksize=self.chunksize, progress_handler=self.annex.progress)
     
     @remotemethod
     @retry(**retry_conditions)
@@ -324,7 +325,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                 parent = self.root
             newfile = parent.new_file(fileinfo['filename'])
             if os.path.getsize(fpath):
-                newfile.upload(fpath)
+                newfile.upload(fpath, chunksize=self.chunksize, progress_handler=self.annex.progress)
             else:
                 newfile.upload_empty()
             #self._set_key_info(key, 'md5', newfile['md5Checksum'])
@@ -334,7 +335,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
     @retry(**retry_conditions)
     def transferexport_retrieve(self, key, fpath, name):
         file_ = self.root.child_from_path(name)
-        file_.download(fpath)
+        file_.download(fpath, chunksize=self.chunksize, progress_handler=self.annex.progress)
             
     @remotemethod
     @retry(**retry_conditions)
