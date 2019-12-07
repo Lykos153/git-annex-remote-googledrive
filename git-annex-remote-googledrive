@@ -15,7 +15,6 @@
 import os, sys, traceback
 import json
 
-from pydrive.auth import GoogleAuth
 from drive import GoogleDrive
 from drive import DriveFile
 from drive import DriveFolder
@@ -23,7 +22,6 @@ from drive import NotAuthenticatedError
 from oauth2client.client import OAuth2Credentials
 from google.auth.exceptions import RefreshError
 
-from pydrive.files import ApiRequestError
 from googleapiclient.errors import HttpError
 from json.decoder import JSONDecodeError
 
@@ -48,7 +46,6 @@ versions = None
 retry_conditions = {
         'wait': wait_exponential(multiplier=1, max=10),
         'retry': (
-            retry_if_exception_type(ApiRequestError) |
             retry_if_exception_type(HttpError) |
             retry_if_exception_type(ConnectionResetError)
         ),
