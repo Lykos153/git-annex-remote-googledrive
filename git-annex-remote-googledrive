@@ -76,7 +76,6 @@ class GoogleRemote(ExportRemote):
     def __init__(self, annex):
         super().__init__(annex)
         self.presence_cache = dict()
-        self.folder_cache = dict()
         self.state_cache = dict()
 
         self.gauth = json.dumps({
@@ -319,157 +318,81 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
             self.checkpresentexport(key, name)
         if not self.presence_cache[name]:
             fileinfo = self._splitpath(name)
-            parent = self._getsubfolder(fileinfo['path'], create=True)
-            newfile = \
-                self.drive.CreateFile({
-                            'title': fileinfo['filename'],
-                            'parents': [{
-                                'kind': 'drive#parentReference',
-                                'id': parent['id']
-                            }]
-                        })
-            if os.path.getsize(fpath):
-                newfile.SetContentFile(fpath)
-            try:
-                newfile.Upload()
-            except:
-                del self.presence_cache[name]
+            if fileinfo['path']:
+                parent = self.root.create_path(fileinfo['path'])
             else:
-                self._set_key_info(key, 'md5', newfile['md5Checksum'])
-                self.presence_cache[name] = True
+                parent = self.root
+            newfile = parent.new_file(fileinfo['filename'])
+            if os.path.getsize(fpath):
+                newfile.upload(fpath)
+            else:
+                newfile.upload_empty()
+            #self._set_key_info(key, 'md5', newfile['md5Checksum'])
+            self.presence_cache[name] = True
 
     @remotemethod
     @retry(**retry_conditions)
     def transferexport_retrieve(self, key, fpath, name):
-        fileinfo = self._splitpath(name)
-        parent = self._getsubfolder(fileinfo['path'], create=False)
-        if not parent:
-            raise RemoteError("File not present")
-        newfile = self._getfile(fileinfo['filename'], parent=parent)
-        newfile.GetContentFile(fpath)
+        file_ = self.root.child_from_path(name)
+        file_.download(fpath)
             
     @remotemethod
     @retry(**retry_conditions)
     def checkpresentexport(self, key, name):
-        fileinfo = self._splitpath(name)
+        try:
+            file_ = self.root.child_from_path(name)
+            if file_.isfolder():
+                raise RemoteError("{} is a folder, not a file".format(name))
+            #TODO: check md5sum 
+            # Old code:
+            # if file_ and file_['md5Checksum'] == self._get_key_info(key, 'md5'):
+            #     self.presence_cache[name] = True
+            # elif file_ and self._get_key_info(key, 'md5') == None:
+            #     self.presence_cache[name] = True
+            #     self._set_key_info(key, 'md5', file_['md5Checksum'])
+            # elif file_ and file_['md5Checksum'] != self._get_key_info(key, 'md5'):
+            #     raise RemoteError("{} was changed on remote side. Check the file or delete it in order to continue.".format(name))
+            # Will RemoteError result in CHECKPRESENT-UNKNOWN or in ERROR? Which do I want?
 
-        parent = self._getsubfolder(fileinfo['path'], create=False)
-        if not parent:
-            self.presence_cache[name] = False
-            return False
-        file_ = self._getfile(fileinfo['filename'], parent=parent)
-        
-        if file_ and file_['md5Checksum'] == self._get_key_info(key, 'md5'):
             self.presence_cache[name] = True
-        elif file_ and self._get_key_info(key, 'md5') == None:
-            self.presence_cache[name] = True
-            self._set_key_info(key, 'md5', file_['md5Checksum'])
-        elif file_ and file_['md5Checksum'] != self._get_key_info(key, 'md5'):
-            raise RemoteError("{} was changed on remote side. Check the file or delete it in order to continue.".format(name))
-        else:
+        except FileNotFoundError:
             self.presence_cache[name] = False
         return self.presence_cache[name]
 
     @remotemethod
     @retry(**retry_conditions)
     def removeexport(self, key, name):
-        fileinfo = self._splitpath(name)
-
-        parent = self._getsubfolder(fileinfo['path'], create=False)
-        if not parent:
-            return
-        file_ = self._getfile(fileinfo['filename'], parent=parent)
-        if file_:
-            file_.Delete()
+        try:
+            file_ = self.root.child_from_path(name)
+            if file_.isfolder():
+                raise RemoteError("{} is a folder. Not deleting".format(name))
+            file_.remove()
+        except FileNotFoundError:
+            pass
 
     @remotemethod
     @retry(**retry_conditions)
     def removeexportdirectory(self, directory):
-        file_ = self._getsubfolder(directory, create=False)
-        if file_:
-            file_.Delete()
+        try:
+            file_ = self.root.child_from_path(directory)
+            if not file_.isfolder():
+                raise RemoteError("{} is a file. Not deleting".format(directory))
+            file_.remove()
+        except FileNotFoundError:
+            pass
 
     @remotemethod
     @retry(**retry_conditions)
     def renameexport(self, key, name, new_name):
-        oldfileinfo = self._splitpath(name)
+        file_ = self.root.child_from_path(name)
         newfileinfo = self._splitpath(new_name)
-        oldparent = self._getsubfolder(oldfileinfo['path'], create=False)
-        newparent = self._getsubfolder(newfileinfo['path'], create=True)
-        file_ = self._getfile(oldfileinfo['filename'],
-                              parent=oldfileinfo['parent'])
-        if oldfileinfo['path'] != newfileinfo['path']:
-            file_['parents'] = [{'kind': 'drive#parentReference',
-                                'id': newparent['id']}]
-        if oldfileinfo['filename'] != newfileinfo['filename']:
-            file_['title'] = newfileinfo['filename']
-        file_.Upload()
-
-
-    def _getfile(self, filename, parent=None):
-        if not parent:
-            parent = self.root
-        query = "'{parent_id}' in parents and \
-                 title='{filename}' and \
-                 trashed=false".format(
-                    parent_id=parent['id'],
-                    filename=filename.replace("'", r"\'")
-                 )
-        file_list = self.drive.ListFile({'q': query}).GetList()
-        if (len(file_list) == 1):
-            return file_list[0]
-        elif len(file_list) == 0:
-            return None
+        if newfileinfo['path']:
+            newparent = self.root.create_path(newfileinfo['path'])
         else:
-            raise RemoteError ("There are two or more files named {}".format(key))
+            newparent = self.root
+        file_.move(newparent, newfileinfo['filename'])
             
-    def _getsubfolder(self, path, create=True):
-        return self._getfolder(path, root=self.root, create=create)
-    
-    def _getfolder(self, path, root=None, create=True):
-        path_list = path.strip('/').split('/')
-        if root:
-            current_folder = root
-            current_path = self.prefix
-        else:
-            current_folder = self.drive.CreateFile({'id': 'root'})
-            current_path = ''
 
-        if path_list == ['']:
-            return current_folder
-        for folder in path_list:
-            current_path = '/'.join([current_path, folder])
-            if current_path in self.folder_cache:
-                current_folder = self.folder_cache[current_path]
-                continue
-                
-            query = "'{current_folder_id}' in parents and \
-                     title='{folder}' and \
-                     trashed=false".format(
-                        current_folder_id=current_folder['id'], 
-                        folder=folder.replace("'", r"\'")
-                     )
-            file_list = self.drive.ListFile({'q': query}).GetList()
-            if (len(file_list) == 1):
-                current_folder = file_list[0]
-            elif len(file_list) == 0:
-                if create:
-                    current_folder = \
-                        self.drive.CreateFile({'title': folder,
-                            'parents': [{'kind': 'drive#parentReference'
-                            , 'id': current_folder['id']}],
-                            'mimeType': 'application/vnd.google-apps.folder'
-                            })
-                    current_folder.Upload()
-                else:
-                    return None
-            else:
-                raise self.RemoteError(
-                    "There are two or more folders named {}".format(current_path)
-                )
-            self.folder_cache[current_path] = current_folder
-
-        return current_folder
 
     def _splitpath(self, filename):
         splitpath = filename.rsplit('/', 1)
