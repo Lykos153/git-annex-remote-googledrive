@@ -19,6 +19,8 @@ from drive import GoogleDrive
 from drive import DriveFile
 from drive import DriveFolder
 from drive import NotAuthenticatedError
+from keys import RemoteRoot
+from keys import Key
 from oauth2client.client import OAuth2Credentials
 from google.auth.exceptions import RefreshError
 
@@ -110,27 +112,14 @@ class GoogleRemote(ExportRemote):
         print("Setup complete. An auth token was stored in token.json. Now run 'git annex initremote' with your desired parameters. If you don't run it from the same folder, specify via token=path/to/token.json")
          
     def migrate(self, prefix):
-        self.prefix = prefix
+        prefix = prefix
         with open("token.json", 'r') as fp:
             creds = fp.read()
-        try:
-            self.drive = GoogleDrive(self.gauth, creds)
-        except JSONDecodeError:
-            raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
-        
-        
-        try:
-            self.drive.connect()
-        except:
-            raise RemoteError("Failed to access the remote directory. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
 
-        try:
-            self.root = self.drive.child_from_path(self.prefix)
-        except FileNotFoundError:
-            raise RemoteError("'{}' does not exist on the remote.".format(prefix))
+        self.root = self._get_root(self.gauth, creds, prefix)
             
         self.migration_count = {'moved':0, 'deleted':0}
-        self._migration_traverse(self.root, self.prefix)
+        self._migration_traverse(self.root, prefix)
         
     @retry(wait=wait_fixed(2), retry=retry_conditions['retry'])   
     def _migration_traverse(self, current_folder, current_path):
@@ -150,71 +139,67 @@ class GoogleRemote(ExportRemote):
             current_folder.remove()
             self.migration_count['deleted'] += 1
 
+    def _get_root(self, gauth, creds, prefix=None, root_id=None):
+        try:
+            if prefix:
+                return RemoteRoot.from_path(gauth, creds, prefix)
+            else:
+                return RemoteRoot.from_id(gauth, creds, root_id)
+        except JSONDecodeError:
+            raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
+        except (NotAuthenticatedError, RefreshError):
+            raise RemoteError("Failed to authenticate with Google. Please run 'git-annex-remote-googledrive setup'.")
+        except FileNotFoundError:
+            if prefix:
+                raise RemoteError("Prefix {} does not exist or does not point to a folder.".format(prefix))
+            else:
+                raise RemoteError("File ID {} does not exist or does not point to a folder.".format(root_id))
+        except Exception as e:
+            raise RemoteError("Failed to connect with Google. Please check your internet connection.", e)
+
+
     @remotemethod
     def initremote(self):
         self._send_version()
-        self.prefix = self.annex.getconfig('prefix')
+        prefix = self.annex.getconfig('prefix')
         root_id = self.annex.getconfig('root_id')
-        if not self.prefix and not root_id:
+        if not prefix and not root_id:
             raise RemoteError("Either prefix or root_id must be given.")
 
         token_file = self.annex.getconfig('token') or 'token.json'
         try:
             with open(token_file, 'r') as fp:
-                creds = fp.read()
+                credentials = fp.read()
         except:
-            creds = None
+            credentials = None
         if self.annex.getconfig('keep_token') != 'yes':
             try:
                 os.remove(token_file)
-            except:
+            except FileNotFoundError:
                 pass
+            except Exception as e:
+                self._info("Could not delete token file. {}".format(e))
 
-        if creds is None:
-            creds = self.annex.getcreds('credentials')['user']
-            if not creds:
+        if credentials is None:
+            credentials = self.annex.getcreds('credentials')['user']
+            if not credentials:
                 raise RemoteError("No Credentials found. Run 'git-annex-remote-googledrive setup' in order to authenticate.")
 
-        try:
-            self.drive = GoogleDrive(self.gauth, creds)
-        except JSONDecodeError:
-            raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
-        
-        try:
-            self.drive.connect()
-        except (NotAuthenticatedError, RefreshError):
-            raise RemoteError("Failed to authenticate with Google. Please run 'git-annex-remote-googledrive setup'.")
-        except:
-            raise RemoteError("Failed to connect with Google. Please check your internet connection.")
-
-        if self.prefix:
-            try:
-                self.root = self.drive.child_from_path(self.prefix)
-            except FileNotFoundError:
-                raise RemoteError("Prefix {} not found.".format(prefix))
-        else:
-            try:
-                self.root = self.drive.item_by_id(root_id)
-            except FileNotFoundError:
-                raise RemoteError("File id {} does not exist.".format(root_id))
-
-        if not isinstance(self.root, DriveFolder):
-            raise RemoteError("Specified prefix or id does not point to a folder.")
+        self.root = self._get_root(self.gauth, credentials, prefix, root_id)
 
         if self.annex.getconfig('exporttree') != 'yes':
-            file_list = list(self.root.children(files=False))
-            if len(file_list):
-                raise RemoteError("{prefix} has subdirectories. Are you sure 'prefix' or 'id' is set correctly? In case you're migrating from gdrive or rclone, run 'git-annex-remote-googledrive migrate {prefix}' first.".format(prefix=self.prefix))
+            if next(self.root.children(files=False)):
+                raise RemoteError("{prefix} has subdirectories. Are you sure 'prefix' or 'id' is set correctly? In case you're migrating from gdrive or rclone, run 'git-annex-remote-googledrive migrate {prefix}' first.".format(prefix=prefix))
         
 
         self.annex.setconfig('root_id', self.root.id)
-        credentials = ''.join(self.drive.json_creds().split())
+        credentials = ''.join(self.root.json_creds().split())
         self.annex.setcreds('credentials', credentials, '')
 
     @remotemethod
     def prepare(self):
         self._send_version()
-        self.prefix = self.annex.getconfig('prefix')
+        prefix = self.annex.getconfig('prefix')
         root_id = self.annex.getconfig('root_id')
         credentials = self.annex.getcreds('credentials')['user']
 
@@ -225,37 +210,12 @@ class GoogleRemote(ExportRemote):
             self._info("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
             self._info("You can mute this warning by issuing 'git annex enableremote <remote-name> mute-api-lockdown-warning=true'")
             self._info("======")
-        try:
-            self.drive = GoogleDrive(self.gauth, credentials)
-        except JSONDecodeError:
-            raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
-        
-        try:
-            self.drive.connect()
-        except (NotAuthenticatedError, RefreshError):
-            raise RemoteError("Failed to authenticate with Google. Ensure that you are connected to the internet \
-or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremote <remotename>.")
-        except:
-            raise RemoteError("Failed to connect with Google. Please check your internet connection.")
 
-        
-        if self.prefix:
-            try:
-                self.root = self.drive.child_from_path(self.prefix)
-            except FileNotFoundError:
-                raise RemoteError("Failed to access the remote directory {prefix}. Was the repo moved?.".format(prefix=prefix))
-            if self.root.id != root_id:
-                raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
-        else:
-            try:
-                self.root = self.drive.item_by_id(root_id)
-            except FileNotFoundError:
-                raise RemoteError("Failed to access the remote directory with id {root_id}. Ensure that git-annex-remote-googledrive has been configured correctly and has permission to access the folder.".format(root_id=root_id))
+        self.root = self._get_root(self.gauth, credentials, prefix, root_id)
+        if self.root.id != root_id:
+            raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
 
-        if not isinstance(self.root, DriveFolder):
-            raise RemoteError("Specified prefix or id does not point to a folder.")
-
-        credentials = ''.join(self.drive.json_creds().split())
+        credentials = ''.join(self.root.json_creds().split())
         self.annex.setcreds('credentials', credentials, '')
         
         # Clean up test keys
@@ -264,7 +224,7 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                     root_id=self.root.id
                  )
 
-        file_list = list(self.drive.items_by_query(query))
+        file_list = list(self.root.drive.items_by_query(query))
         if len(file_list):
             self._info("Info: Cleaning up test keys")
         for file_ in file_list:
@@ -274,40 +234,26 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
     @remotemethod
     @retry(**retry_conditions)
     def transfer_store(self, key, fpath):
-        if key not in self.presence_cache:
-            self.checkpresent(key)
-        if not self.presence_cache[key]:
-            newfile = self.root.new_file(key)
-            if os.path.getsize(fpath):
-                newfile.upload(fpath, chunksize=self.chunksize, progress_handler=self._progress)
-            else:
-                newfile.upload_empty()
-            self.presence_cache[key] = True
+        self.root.new_key(key).upload(fpath, self.chunksize, self._progress)
 
     @remotemethod
     @retry(**retry_conditions)
     def transfer_retrieve(self, key, fpath):
-        newfile = self.root.child(key)
-        newfile.download(fpath, chunksize=self.chunksize, progress_handler=self._progress)
+        self.root.get_key(key).download(fpath, chunksize=self.chunksize, progress_handler=self._progress)
     
     @remotemethod
     @retry(**retry_conditions)
     def checkpresent(self, key):
         try:
-            file_ = self.root.child(key, folders=False)
-            self.presence_cache[key] = True
+            file_ = self.root.get_key(key)
+            return True
         except FileNotFoundError:
-            self.presence_cache[key] = False
-        return self.presence_cache[key]
+            return False
 
     @remotemethod
     @retry(**retry_conditions)
     def remove(self, key):
-        try:
-            file_ = self.root.child(key)
-            file_.remove()
-        except FileNotFoundError:
-            pass
+        file_ = self.root.delete_key(key)
 
     @remotemethod
     @retry(**retry_conditions)
