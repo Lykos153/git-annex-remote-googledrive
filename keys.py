@@ -9,16 +9,14 @@ class RemoteRoot():
         self.root = root
 
     @classmethod
-    def from_path(cls, gauth_json, creds_json, rootpath):
-        drive = GoogleDrive(gauth_json, creds_json)
-        drive.connect()
+    def from_path(cls, creds_json, rootpath):
+        drive = GoogleDrive(creds_json)
         root = drive.create_path(rootpath)
         return cls(drive, root)
 
     @classmethod
-    def from_id(cls, gauth_json, creds_json, root_id):
-        drive = GoogleDrive(gauth_json, creds_json)
-        drive.connect()
+    def from_id(cls, creds_json, root_id):
+        drive = GoogleDrive(creds_json)
         root = drive.item_by_id(root_id)
         if root.isfolder():
             return cls(drive, root)

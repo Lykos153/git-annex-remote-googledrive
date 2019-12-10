@@ -98,14 +98,7 @@ class GoogleRemote(ExportRemote):
         print("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
         print("======")
 
-        try:
-            with open("token.json", 'r') as fp:
-                creds = fp.read()
-        except:
-            creds = None
-
-        self.drive = GoogleDrive(self.gauth, creds)
-        creds = self.drive.auth()
+        creds = GoogleDrive.auth(self.gauth)
         with open("token.json", 'w') as fp:
             fp.write(creds)
         #TODO: Store the token in the .git folder
@@ -116,7 +109,7 @@ class GoogleRemote(ExportRemote):
         with open("token.json", 'r') as fp:
             creds = fp.read()
 
-        self.root = self._get_root(self.gauth, creds, prefix)
+        self.root = self._get_root(creds, prefix)
             
         self.migration_count = {'moved':0, 'deleted':0}
         self._migration_traverse(self.root, prefix)
@@ -139,12 +132,12 @@ class GoogleRemote(ExportRemote):
             current_folder.remove()
             self.migration_count['deleted'] += 1
 
-    def _get_root(self, gauth, creds, prefix=None, root_id=None):
+    def _get_root(self, creds, prefix=None, root_id=None):
         try:
             if prefix:
-                return RemoteRoot.from_path(gauth, creds, prefix)
+                return RemoteRoot.from_path(creds, prefix)
             else:
-                return RemoteRoot.from_id(gauth, creds, root_id)
+                return RemoteRoot.from_id(creds, root_id)
         except JSONDecodeError:
             raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
         except (NotAuthenticatedError, RefreshError):
@@ -185,7 +178,7 @@ class GoogleRemote(ExportRemote):
             if not credentials:
                 raise RemoteError("No Credentials found. Run 'git-annex-remote-googledrive setup' in order to authenticate.")
 
-        self.root = self._get_root(self.gauth, credentials, prefix, root_id)
+        self.root = self._get_root(credentials, prefix, root_id)
 
         if self.annex.getconfig('exporttree') != 'yes':
             if next(self.root.children(files=False)):
@@ -211,7 +204,7 @@ class GoogleRemote(ExportRemote):
             self._info("You can mute this warning by issuing 'git annex enableremote <remote-name> mute-api-lockdown-warning=true'")
             self._info("======")
 
-        self.root = self._get_root(self.gauth, credentials, prefix, root_id)
+        self.root = self._get_root(credentials, prefix, root_id)
         if self.root.id != root_id:
             raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
 
