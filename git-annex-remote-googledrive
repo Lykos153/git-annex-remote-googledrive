@@ -112,21 +112,21 @@ class GoogleRemote(ExportRemote):
         self.root = self._get_root(creds, prefix)
             
         self.migration_count = {'moved':0, 'deleted':0}
-        self._migration_traverse(self.root, prefix)
+        self._migration_traverse(self.root.folder, prefix)
         
     @retry(wait=wait_fixed(2), retry=retry_conditions['retry'])   
     def _migration_traverse(self, current_folder, current_path):
         #TODO: Use batch requests
-        if current_folder == self.root:
+        if current_folder == self.root.folder:
             for subfolder in current_folder.children(files=False):
                 self._migration_traverse(subfolder, current_path+"/"+subfolder.name)
         else:
             for file_ in current_folder.children():
                 if isinstance(file_, DriveFolder):
-                    self._migration_traverse(file_, current_path+"/"+file.name)
+                    self._migration_traverse(file_, current_path+"/"+file_.name)
                 else:
                     print ( "Moving {}/{}".format(current_path,file_.name) )
-                    file_.move(self.root)
+                    file_.move(self.root.folder)
                     self.migration_count['moved'] += 1
             print ("Deleting folder {}".format(current_path))
             current_folder.remove()
@@ -180,8 +180,7 @@ class GoogleRemote(ExportRemote):
 
         self.root = self._get_root(credentials, prefix, root_id)
 
-        if self.annex.getconfig('exporttree') != 'yes':
-            if next(self.root.children(files=False)):
+        if self.annex.getconfig('exporttree') != 'yes' and next(self.root.folder.children(files=False), None):
                 raise RemoteError("{prefix} has subdirectories. Are you sure 'prefix' or 'id' is set correctly? In case you're migrating from gdrive or rclone, run 'git-annex-remote-googledrive migrate {prefix}' first.".format(prefix=prefix))
         
 
@@ -217,7 +216,7 @@ class GoogleRemote(ExportRemote):
                     root_id=self.root.id
                  )
 
-        file_list = list(self.root.drive.items_by_query(query))
+        file_list = list(self.root.folder.drive.items_by_query(query))
         if len(file_list):
             self._info("Info: Cleaning up test keys")
         for file_ in file_list:
