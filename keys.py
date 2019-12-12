@@ -1,3 +1,5 @@
+from __future__ import annotations #only > 3.7, better to find a different solution
+
 from drive import GoogleDrive
 from drive import DriveFile
 from drive import DriveFolder
@@ -9,13 +11,13 @@ class RemoteRoot():
         self.root = root
 
     @classmethod
-    def from_path(cls, creds_json, rootpath):
+    def from_path(cls, creds_json, rootpath) -> RemoteRoot:
         drive = GoogleDrive(creds_json)
         root = drive.create_path(rootpath)
         return cls(drive, root)
 
     @classmethod
-    def from_id(cls, creds_json, root_id):
+    def from_id(cls, creds_json, root_id) -> RemoteRoot:
         drive = GoogleDrive(creds_json)
         root = drive.item_by_id(root_id)
         if root.isfolder():
@@ -27,13 +29,13 @@ class RemoteRoot():
     def id(self):
         return self.root.id
 
-    def json_creds(self):
+    def json_creds(self) -> str:
         return self.drive.json_creds()
 
-    def get_key(self, key):
+    def get_key(self, key) -> Key:
         return Key(key, self.root.child(key, folders=False))
 
-    def new_key(self, key):
+    def new_key(self, key) -> Key:
         try:
             return self.get_key(key)
         except FileNotFoundError:
