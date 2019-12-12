@@ -6,44 +6,43 @@ from drive import DriveFolder
 from drive import NotAuthenticatedError
 
 class RemoteRoot():
-    def __init__(self, drive: GoogleDrive, root: DriveFolder):
-        self.drive = drive
-        self.root = root
+    def __init__(self, rootfolder: DriveFolder):
+        self.folder = rootfolder
 
     @classmethod
     def from_path(cls, creds_json, rootpath) -> RemoteRoot:
         drive = GoogleDrive(creds_json)
         root = drive.create_path(rootpath)
-        return cls(drive, root)
+        return cls(root)
 
     @classmethod
     def from_id(cls, creds_json, root_id) -> RemoteRoot:
         drive = GoogleDrive(creds_json)
         root = drive.item_by_id(root_id)
         if root.isfolder():
-            return cls(drive, root)
+            return cls(root)
         else:
             raise FileNotFoundError("ID {} is not a folder".format(root_id))
 
     @property
     def id(self):
-        return self.root.id
+        return self.folder.id
 
     def json_creds(self) -> str:
-        return self.drive.json_creds()
+        return self.folder.drive.json_creds()
 
     def get_key(self, key) -> Key:
-        return Key(key, self.root.child(key, folders=False))
+        return Key(key, self.folder.child(key, folders=False))
 
     def new_key(self, key) -> Key:
         try:
             return self.get_key(key)
         except FileNotFoundError:
-            return Key(key, self.root.new_file(key))
+            return Key(key, self.folder.new_file(key))
 
     def delete_key(self, key):
         try:
-            remote_file = self.root.child(key)
+            remote_file = self.folder.child(key)
             remote_file.remove()
         except FileNotFoundError:
             pass
