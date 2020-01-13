@@ -47,9 +47,11 @@ class RemoteRoot(RemoteRootBase):
 
     def new_key(self, key: str) -> Key:
         try:
-            return self.get_key(key)
+            self.get_key(key)
         except FileNotFoundError:
             return Key(key, self.folder.new_file(key))
+        else:
+            raise FileExistsError(key)
 
     def delete_key(self, key: str):
         try:
@@ -81,11 +83,13 @@ class ExportRemoteRoot(RemoteRootBase):
     def new_key(self, key: str, remote_path: Union(str, PathLike)) -> ExportKey:
         remote_path = PurePath(remote_path)
         try:
-            return self.get_key(key, str(remote_path))
+            self.get_key(key, str(remote_path))
         except FileNotFoundError:
             parent = self.folder.create_path(str(remote_path.parent))
             remote_file = parent.new_file(remote_path.name)
             return ExportKey(key, remote_path, remote_file)
+        else:
+            raise FileExistsError(remote_path)
             
     def delete_key(self, key:str, remote_path: Union(str, PathLike)):
         try:
@@ -94,8 +98,7 @@ class ExportRemoteRoot(RemoteRootBase):
             pass
 
 
-class ExportKey():
+class ExportKey(Key):
     def __init__(self, key: str, path: Union(str, PathLike), remote_file: DriveFile):
-        self.key = key
+        super().__init__(key, remote_file)
         self.path = PurePath(path)
-        self.file = remote_file
