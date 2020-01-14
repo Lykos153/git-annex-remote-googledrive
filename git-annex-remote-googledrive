@@ -19,8 +19,9 @@ from drive import GoogleDrive
 from drive import DriveFile
 from drive import DriveFolder
 from drive import NotAuthenticatedError
-from keys import RemoteRoot
-from keys import Key
+from keys import RemoteRoot, Key
+from keys import ExportRemoteRoot, ExportKey
+from keys import HasSubdirError
 from oauth2client.client import OAuth2Credentials
 from google.auth.exceptions import RefreshError
 
@@ -69,6 +70,43 @@ def remotemethod(f):
 
     return wrapper
 
+def connect(exporttree=False):
+    if exporttree:
+        root_class = ExportRemoteRoot
+    else:
+        root_class = RemoteRoot
+    def decorator(f):
+        @wraps(f)
+        def wrapper(self, *args, **kwargs):
+            if not hasattr(self, 'root') or self.root is None:
+                prefix = self.annex.getconfig('prefix')
+                root_id = self.annex.getconfig('root_id')
+                credentials = self.annex.getcreds('credentials')['user']
+
+                root = self._get_root(root_class, credentials, prefix, root_id)
+                if root.id != root_id:
+                    raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
+
+                credentials = ''.join(root.json_creds().split())
+                self.annex.setcreds('credentials', credentials, '')
+                
+                # Clean up test keys
+                query = "'{root_id}' in parents and \
+                            name contains 'this-is-a-test-key'".format(
+                            root_id=root.id
+                            )
+
+                file_list = list(root.folder.drive.items_by_query(query))
+                if len(file_list):
+                    self._info("Info: Cleaning up test keys")
+                for file_ in file_list:
+                    file_.remove()
+                self.root = root
+
+            return f(self, *args, **kwargs)
+        return wrapper
+    return decorator
+    
 
 class GoogleRemote(ExportRemote):
 
@@ -132,12 +170,12 @@ class GoogleRemote(ExportRemote):
             current_folder.remove()
             self.migration_count['deleted'] += 1
 
-    def _get_root(self, creds, prefix=None, root_id=None):
+    def _get_root(self, RootClass, creds, prefix=None, root_id=None):
         try:
             if prefix:
-                return RemoteRoot.from_path(creds, prefix)
+                return RootClass.from_path(creds, prefix)
             else:
-                return RemoteRoot.from_id(creds, root_id)
+                return RootClass.from_id(creds, root_id)
         except JSONDecodeError:
             raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
         except (NotAuthenticatedError, RefreshError):
@@ -178,22 +216,22 @@ class GoogleRemote(ExportRemote):
             if not credentials:
                 raise RemoteError("No Credentials found. Run 'git-annex-remote-googledrive setup' in order to authenticate.")
 
-        self.root = self._get_root(credentials, prefix, root_id)
 
-        if self.annex.getconfig('exporttree') != 'yes' and next(self.root.folder.children(files=False), None):
-                raise RemoteError("{prefix} has subdirectories. Are you sure 'prefix' or 'id' is set correctly? In case you're migrating from gdrive or rclone, run 'git-annex-remote-googledrive migrate {prefix}' first.".format(prefix=prefix))
+        if self.annex.getconfig('exporttree') == 'yes':
+            self.root = self._get_root(ExportRemoteRoot, credentials, prefix, root_id)
+        else:
+            try:
+                self.root = self._get_root(RemoteRoot, credentials, prefix, root_id)
+            except HasSubdirError:
+                raise RemoteError("Specified folder has subdirectories. Are you sure 'prefix' or 'id' is set correctly? In case you're migrating from gdrive or rclone, run 'git-annex-remote-googledrive migrate {prefix}' first.".format(prefix=prefix))
         
 
         self.annex.setconfig('root_id', self.root.id)
         credentials = ''.join(self.root.json_creds().split())
         self.annex.setcreds('credentials', credentials, '')
 
-    @remotemethod
     def prepare(self):
         self._send_version()
-        prefix = self.annex.getconfig('prefix')
-        root_id = self.annex.getconfig('root_id')
-        credentials = self.annex.getcreds('credentials')['user']
 
         if self.annex.getconfig('mute-api-lockdown-warning') != "true":
             self._info("====== git-annex-remote-googledrive")
@@ -203,28 +241,9 @@ class GoogleRemote(ExportRemote):
             self._info("You can mute this warning by issuing 'git annex enableremote <remote-name> mute-api-lockdown-warning=true'")
             self._info("======")
 
-        self.root = self._get_root(credentials, prefix, root_id)
-        if self.root.id != root_id:
-            raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
-
-        credentials = ''.join(self.root.json_creds().split())
-        self.annex.setcreds('credentials', credentials, '')
-        
-        # Clean up test keys
-        query = "'{root_id}' in parents and \
-                 name contains 'this-is-a-test-key'".format(
-                    root_id=self.root.id
-                 )
-
-        file_list = list(self.root.folder.drive.items_by_query(query))
-        if len(file_list):
-            self._info("Info: Cleaning up test keys")
-        for file_ in file_list:
-            file_.remove()
-    
-    
     @remotemethod
     @retry(**retry_conditions)
+    @connect()
     def transfer_store(self, key, fpath):
         self.root.new_key(key).upload(
                     fpath, 
@@ -233,6 +252,7 @@ class GoogleRemote(ExportRemote):
 
     @remotemethod
     @retry(**retry_conditions)
+    @connect()
     def transfer_retrieve(self, key, fpath):
         self.root.get_key(key).download(
                     fpath, 
@@ -241,6 +261,7 @@ class GoogleRemote(ExportRemote):
     
     @remotemethod
     @retry(**retry_conditions)
+    @connect()
     def checkpresent(self, key):
         try:
             self.root.get_key(key)
@@ -250,11 +271,13 @@ class GoogleRemote(ExportRemote):
 
     @remotemethod
     @retry(**retry_conditions)
+    @connect()
     def remove(self, key):
         self.root.delete_key(key)
 
     @remotemethod
     @retry(**retry_conditions)
+    @connect(exporttree=True)
     def transferexport_store(self, key, fpath, name):
         if name not in self.presence_cache:
             self.checkpresentexport(key, name)
@@ -274,12 +297,14 @@ class GoogleRemote(ExportRemote):
 
     @remotemethod
     @retry(**retry_conditions)
+    @connect(exporttree=True)
     def transferexport_retrieve(self, key, fpath, name):
         file_ = self.root.child_from_path(name)
         file_.download(fpath, chunksize=self.chunksize, progress_handler=self._progress)
             
     @remotemethod
     @retry(**retry_conditions)
+    @connect(exporttree=True)
     def checkpresentexport(self, key, name):
         try:
             file_ = self.root.child_from_path(name)
@@ -303,6 +328,7 @@ class GoogleRemote(ExportRemote):
 
     @remotemethod
     @retry(**retry_conditions)
+    @connect(exporttree=True)
     def removeexport(self, key, name):
         try:
             file_ = self.root.child_from_path(name)
@@ -314,6 +340,7 @@ class GoogleRemote(ExportRemote):
 
     @remotemethod
     @retry(**retry_conditions)
+    @connect(exporttree=True)
     def removeexportdirectory(self, directory):
         try:
             file_ = self.root.child_from_path(directory)
@@ -325,6 +352,7 @@ class GoogleRemote(ExportRemote):
 
     @remotemethod
     @retry(**retry_conditions)
+    @connect(exporttree=True)
     def renameexport(self, key, name, new_name):
         file_ = self.root.child_from_path(name)
         newfileinfo = self._splitpath(new_name)
