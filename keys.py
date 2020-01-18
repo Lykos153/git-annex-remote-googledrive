@@ -12,6 +12,9 @@ from drive import NotAuthenticatedError
 class NotAFileError(Exception):
     pass
 
+class HasSubdirError(Exception):
+    pass
+
 class RemoteRootBase:
     def __init__(self, rootfolder: DriveFolder):
         self.folder = rootfolder
@@ -39,11 +42,16 @@ class RemoteRootBase:
         return self.folder.drive.json_creds()
 
 class RemoteRoot(RemoteRootBase):
+    def __init__(self, rootfolder):
+        super().__init__(rootfolder)
+        if next(self.folder.children(files=False), None):
+            raise HasSubdirError()
+
     def get_key(self, key: str) -> Key:
         remote_file = self.folder.child(key)
         if remote_file.isfolder():
             raise NotAFileError(key)
-        return Key(key, child)
+        return Key(key, remote_file)
 
     def new_key(self, key: str) -> Key:
         try:
@@ -96,6 +104,23 @@ class ExportRemoteRoot(RemoteRootBase):
             self.get_key(key, remote_path).file.remove()
         except FileNotFoundError:
             pass
+
+    def rename_key(self, key:str, remote_path: Union(str, PathLike), new_remote_path: Union(str, PathLike)):
+        remote_path = PurePath(remote_path)
+        new_remote_path = PurePath(new_remote_path)
+
+        remote_file = self.get_key(key, remote_path).file
+        new_parent = self.folder.create_path(str(new_remote_path.parent))
+        remote_file.move(new_parent, new_name=new_remote_path.name)
+
+    def delete_dir(self, dir_path: Union(str, PathLike)):
+        try:
+            remote_folder = self.folder.child_from_path(str(dir_path))
+        except FileNotFoundError:
+            return
+        if not remote_folder.isfolder():
+            raise NotADirectoryError
+        remote_folder.remove()
 
 
 class ExportKey(Key):

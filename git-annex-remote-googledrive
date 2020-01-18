@@ -21,7 +21,7 @@ from drive import DriveFolder
 from drive import NotAuthenticatedError
 from keys import RemoteRoot, Key
 from keys import ExportRemoteRoot, ExportKey
-from keys import HasSubdirError
+from keys import HasSubdirError, NotAFileError
 from oauth2client.client import OAuth2Credentials
 from google.auth.exceptions import RefreshError
 
@@ -245,10 +245,13 @@ class GoogleRemote(ExportRemote):
     @retry(**retry_conditions)
     @connect()
     def transfer_store(self, key, fpath):
-        self.root.new_key(key).upload(
-                    fpath, 
-                    chunksize=self.chunksize,
-                    progress_handler=self._progress)
+        try:
+            self.root.get_key(key)
+        except FileNotFoundError:
+            self.root.new_key(key).upload(
+                        fpath, 
+                        chunksize=self.chunksize,
+                        progress_handler=self._progress)
 
     @remotemethod
     @retry(**retry_conditions)
@@ -279,88 +282,53 @@ class GoogleRemote(ExportRemote):
     @retry(**retry_conditions)
     @connect(exporttree=True)
     def transferexport_store(self, key, fpath, name):
-        if name not in self.presence_cache:
-            self.checkpresentexport(key, name)
-        if not self.presence_cache[name]:
-            fileinfo = self._splitpath(name)
-            if fileinfo['path']:
-                parent = self.root.create_path(fileinfo['path'])
-            else:
-                parent = self.root
-            newfile = parent.new_file(fileinfo['filename'])
-            if os.path.getsize(fpath):
-                newfile.upload(fpath, chunksize=self.chunksize, progress_handler=self._progress)
-            else:
-                newfile.upload_empty()
-            #self._set_key_info(key, 'md5', newfile['md5Checksum'])
-            self.presence_cache[name] = True
+        #TODO: if file already exists, compare md5sum
+        self.root.new_key(key, name).upload(
+                fpath,
+                chunksize=self.chunksize,
+                progress_handler=self._progress
+        )
 
     @remotemethod
     @retry(**retry_conditions)
     @connect(exporttree=True)
     def transferexport_retrieve(self, key, fpath, name):
-        file_ = self.root.child_from_path(name)
-        file_.download(fpath, chunksize=self.chunksize, progress_handler=self._progress)
-            
+        self.root.get_key(key, name).download(
+            fpath,
+            chunksize=self.chunksize,
+            progress_handler=self._progress
+        )
+
     @remotemethod
     @retry(**retry_conditions)
     @connect(exporttree=True)
     def checkpresentexport(self, key, name):
         try:
-            file_ = self.root.child_from_path(name)
-            if file_.isfolder():
-                raise RemoteError("{} is a folder, not a file".format(name))
-            #TODO: check md5sum 
-            # Old code:
-            # if file_ and file_['md5Checksum'] == self._get_key_info(key, 'md5'):
-            #     self.presence_cache[name] = True
-            # elif file_ and self._get_key_info(key, 'md5') == None:
-            #     self.presence_cache[name] = True
-            #     self._set_key_info(key, 'md5', file_['md5Checksum'])
-            # elif file_ and file_['md5Checksum'] != self._get_key_info(key, 'md5'):
-            #     raise RemoteError("{} was changed on remote side. Check the file or delete it in order to continue.".format(name))
-            # Will RemoteError result in CHECKPRESENT-UNKNOWN or in ERROR? Which do I want?
-
-            self.presence_cache[name] = True
+            self.root.get_key(key, name)
+            return True
         except FileNotFoundError:
-            self.presence_cache[name] = False
-        return self.presence_cache[name]
+            return False
 
     @remotemethod
     @retry(**retry_conditions)
     @connect(exporttree=True)
     def removeexport(self, key, name):
-        try:
-            file_ = self.root.child_from_path(name)
-            if file_.isfolder():
-                raise RemoteError("{} is a folder. Not deleting".format(name))
-            file_.remove()
-        except FileNotFoundError:
-            pass
+        self.root.delete_key(key, name)
 
     @remotemethod
     @retry(**retry_conditions)
     @connect(exporttree=True)
     def removeexportdirectory(self, directory):
         try:
-            file_ = self.root.child_from_path(directory)
-            if not file_.isfolder():
-                raise RemoteError("{} is a file. Not deleting".format(directory))
-            file_.remove()
-        except FileNotFoundError:
-            pass
+            self.root.delete_dir(directory)
+        except NotADirectoryError:
+            raise RemoteError("{} is a file. Not deleting".format(directory))
 
     @remotemethod
     @retry(**retry_conditions)
     @connect(exporttree=True)
     def renameexport(self, key, name, new_name):
-        file_ = self.root.child_from_path(name)
-        newfileinfo = self._splitpath(new_name)
-        if newfileinfo['path']:
-            newparent = self.root.create_path(newfileinfo['path'])
-        else:
-            newparent = self.root
-        file_.move(newparent, newfileinfo['filename'])
+        self.root.rename_key(key, name, new_name)
             
     def _progress(self, progress):
         self.annex.progress(progress.resumable_progress)
