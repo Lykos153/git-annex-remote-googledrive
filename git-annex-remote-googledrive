@@ -90,17 +90,6 @@ def connect(exporttree=False):
                 credentials = ''.join(root.json_creds().split())
                 self.annex.setcreds('credentials', credentials, '')
                 
-                # Clean up test keys
-                query = "'{root_id}' in parents and \
-                            name contains 'this-is-a-test-key'".format(
-                            root_id=root.id
-                            )
-
-                file_list = list(root.folder.drive.items_by_query(query))
-                if len(file_list):
-                    self._info("Info: Cleaning up test keys")
-                for file_ in file_list:
-                    file_.remove()
                 self.root = root
 
             return f(self, *args, **kwargs)
