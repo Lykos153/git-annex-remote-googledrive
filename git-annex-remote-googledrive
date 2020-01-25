@@ -15,10 +15,10 @@
 import os, sys, traceback
 import json
 
-from drive import GoogleDrive
-from drive import DriveFile
-from drive import DriveFolder
-from drive import NotAuthenticatedError
+from drivelib import GoogleDrive
+from drivelib import DriveFile
+from drivelib import DriveFolder
+from drivelib import NotAuthenticatedError
 from keys import RemoteRoot, Key
 from keys import ExportRemoteRoot, ExportKey
 from keys import HasSubdirError, NotAFileError

@@ -4,10 +4,10 @@ from pathlib import Path
 from pathlib import PurePath
 from os import PathLike
 
-from drive import GoogleDrive
-from drive import DriveFile
-from drive import DriveFolder
-from drive import NotAuthenticatedError
+from drivelib import GoogleDrive
+from drivelib import DriveFile
+from drivelib import DriveFolder
+from drivelib import NotAuthenticatedError
 
 class NotAFileError(Exception):
     pass
