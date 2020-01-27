@@ -15,12 +15,9 @@
 import os, sys, traceback
 import json
 
-from drivelib import GoogleDrive
-from drivelib import DriveFile
-from drivelib import DriveFolder
-from drivelib import NotAuthenticatedError
 from keys import RemoteRoot, Key
 from keys import ExportRemoteRoot, ExportKey
+from keys import MigrationRoot
 from keys import HasSubdirError, NotAFileError
 from oauth2client.client import OAuth2Credentials
 from google.auth.exceptions import RefreshError
@@ -132,32 +129,11 @@ class GoogleRemote(ExportRemote):
         print("Setup complete. An auth token was stored in token.json. Now run 'git annex initremote' with your desired parameters. If you don't run it from the same folder, specify via token=path/to/token.json")
          
     def migrate(self, prefix):
-        prefix = prefix
         with open("token.json", 'r') as fp:
             creds = fp.read()
 
-        self.root = self._get_root(creds, prefix)
-            
-        self.migration_count = {'moved':0, 'deleted':0}
-        self._migration_traverse(self.root.folder, prefix)
-        
-    @retry(wait=wait_fixed(2), retry=retry_conditions['retry'])   
-    def _migration_traverse(self, current_folder, current_path):
-        #TODO: Use batch requests
-        if current_folder == self.root.folder:
-            for subfolder in current_folder.children(files=False):
-                self._migration_traverse(subfolder, current_path+"/"+subfolder.name)
-        else:
-            for file_ in current_folder.children():
-                if isinstance(file_, DriveFolder):
-                    self._migration_traverse(file_, current_path+"/"+file_.name)
-                else:
-                    print ( "Moving {}/{}".format(current_path,file_.name) )
-                    file_.move(self.root.folder)
-                    self.migration_count['moved'] += 1
-            print ("Deleting folder {}".format(current_path))
-            current_folder.remove()
-            self.migration_count['deleted'] += 1
+        root = self._get_root(MigrationRoot, creds, prefix)
+        return root.migrate()
 
     def _get_root(self, RootClass, creds, prefix=None, root_id=None):
         try:
@@ -411,26 +387,22 @@ def main():
                 if len(sys.argv) != 3:
                     print ("Usage: git-annex-remote-googledrive migrate <prefix>")
                     return
-                    
+
                 try:
-                    remote.migrate(sys.argv[2])
+                    migration_count = remote.migrate(sys.argv[2])
                 except (KeyboardInterrupt, SystemExit):
                     print ("\n{}Exiting.".format(bcolors.WARNING))
-                    if hasattr(remote, 'migration_count') and \
-                                    remote.migration_count['moved'] != 0:
-                        print ("The remote is in an undefined state now. Re-run this script before using git-annex on it.")
+                    print ("The remote is in an undefined state now. Re-run this script before using git-annex on it.")
                 except Exception as e:
                     print ("\n{}Error: {}".format(bcolors.FAIL, e))
-                    if hasattr(remote, 'migration_count') and \
-                                    remote.migration_count['moved'] != 0:
-                        print ("The remote is in an undefined state now. Re-run this script before using git-annex on it.")
+                    print ("The remote is in an undefined state now. Re-run this script before using git-annex on it.")
                 else:
                     print ("\n{}Finished.".format(bcolors.OKGREEN))
                     print ("The remote has benn successfully migrated and can now be used with git-annex-remote-googledrive. Consider checking consistency with 'git annex fsck --from=<remotename> --fast'")
                     print ( "Processed {} subfolders".format(
-                                    remote.migration_count['deleted']))
+                                    migration_count['deleted']))
                     print ( "Moved {} files{}".format(
-                                remote.migration_count['moved'],
+                                migration_count['moved'],
                                 bcolors.ENDC
                             )
                     )
