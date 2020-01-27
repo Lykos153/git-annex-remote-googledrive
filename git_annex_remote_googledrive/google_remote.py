@@ -1,9 +1,4 @@
-#!/usr/bin/env python3
-# git-annex-remote-googledrive adds direct support for Google Drive to git annex using the PyDrive lib
-#
-# Install in PATH as git-annex-remote-googledrive
-#
-# Copyright (C) 2017-2018  Silvio Ankermann
+# Copyright (C) 2017-2020  Silvio Ankermann
 #
 # This program is free software: you can redistribute it and/or modify it under the terms of version 3 of the GNU
 # General Public License as published by the Free Software Foundation.
@@ -12,13 +7,19 @@
 # warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 #
 
-import os, sys, traceback
+import os, traceback
 import json
 
-from keys import RemoteRoot, Key
-from keys import ExportRemoteRoot, ExportKey
-from keys import MigrationRoot
-from keys import HasSubdirError, NotAFileError
+from . import __version__
+from annexremote import __version__ as annexremote_version
+from drivelib import __version__ as drivelib_version
+
+from .keys import RemoteRoot, Key
+from .keys import ExportRemoteRoot, ExportKey
+from .keys import MigrationRoot
+from .keys import HasSubdirError, NotAFileError
+
+
 from oauth2client.client import OAuth2Credentials
 from google.auth.exceptions import RefreshError
 
@@ -33,15 +34,10 @@ from tenacity import wait_exponential, wait_fixed
 from tenacity import stop_after_attempt
 
 import annexremote
-from annexremote import Master
-from annexremote import ExportRemote
 from annexremote import RemoteError
-from annexremote import ProtocolError
 
 def NotAFolderError(Exception):
     pass
-
-versions = None
 
 retry_conditions = {
         'wait': wait_exponential(multiplier=1, max=10),
@@ -94,7 +90,7 @@ def connect(exporttree=False):
     return decorator
     
 
-class GoogleRemote(ExportRemote):
+class GoogleRemote(annexremote.ExportRemote):
 
     def __init__(self, annex):
         super().__init__(annex)
@@ -313,13 +309,15 @@ class GoogleRemote(ExportRemote):
             self.annex.debug(line)
             
     def _send_version(self):
-        global get_versions
-        versions = get_versions()
+        global __version__
+        global annexremote_version
+        global drivelib_version
         self.annex.debug("Running {} version {}".format(
                             os.path.basename(__file__),
-                            versions['this']
+                            __version__
                         ))
-        self.annex.debug("Using AnnexRemote version", versions['annexremote'])
+        self.annex.debug("Using AnnexRemote version", annexremote_version)
+        self.annex.debug("Using Drivelib version", drivelib_version)
     
     def _info(self, message):
         try:
@@ -343,80 +341,3 @@ class GoogleRemote(ExportRemote):
                                     self.state_cache[key],
                                     separators=(',', ':')
                                 ))
-        
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
-def get_versions():
-    output = {}
-    if versions:
-        output['this'] = versions['version']
-    else:
-        output['this'] = "unknown"
-    if hasattr(annexremote, '__version__'):
-        output['annexremote'] = annexremote.__version__
-    else:
-        output['annexremote'] = "unknown"
-    return output
-
-def main():
-    if len(sys.argv) > 1:
-        if sys.argv[1] == 'setup':
-            with open(os.devnull, 'w') as devnull:
-                master = Master(devnull)
-                remote = GoogleRemote(master)
-                remote.setup()
-            return
-        elif sys.argv[1] == 'version':
-            print(os.path.basename(__file__), get_versions()['this'])
-            print("Using AnnexRemote", get_versions()['annexremote'])
-            return
-        elif sys.argv[1] == 'migrate':
-            with open(os.devnull, 'w') as devnull:
-                master = Master(devnull)
-                remote = GoogleRemote(master)
-                if len(sys.argv) != 3:
-                    print ("Usage: git-annex-remote-googledrive migrate <prefix>")
-                    return
-
-                try:
-                    migration_count = remote.migrate(sys.argv[2])
-                except (KeyboardInterrupt, SystemExit):
-                    print ("\n{}Exiting.".format(bcolors.WARNING))
-                    print ("The remote is in an undefined state now. Re-run this script before using git-annex on it.")
-                except Exception as e:
-                    print ("\n{}Error: {}".format(bcolors.FAIL, e))
-                    print ("The remote is in an undefined state now. Re-run this script before using git-annex on it.")
-                else:
-                    print ("\n{}Finished.".format(bcolors.OKGREEN))
-                    print ("The remote has benn successfully migrated and can now be used with git-annex-remote-googledrive. Consider checking consistency with 'git annex fsck --from=<remotename> --fast'")
-                    print ( "Processed {} subfolders".format(
-                                    migration_count['deleted']))
-                    print ( "Moved {} files{}".format(
-                                migration_count['moved'],
-                                bcolors.ENDC
-                            )
-                    )
-
-            return
-
-    output = sys.stdout
-    sys.stdout = sys.stderr
-
-    master = Master(output)
-    master.LinkRemote(GoogleRemote(master))
-    master.Listen()
-
-
-if __name__ == '__main__':
-    main()
-
-
-			

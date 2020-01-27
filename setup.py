@@ -19,37 +19,16 @@
 from setuptools import setup, find_packages
 from codecs import open
 import os, tempfile
-from distutils.command.build_scripts import build_scripts
 
 import versioneer
-commands = versioneer.get_cmdclass().copy()
 
 def readme():
     with open('README.md') as f:
         return f.read()
 
-class my_build_scripts(build_scripts):
-    def run(self):
-        versions = versioneer.get_versions()
-        tempdir = tempfile.mkdtemp()
-        generated = os.path.join(tempdir, "git-annex-remote-googledrive")
-        with open(generated, "wb") as f:
-            for line in open("git-annex-remote-googledrive", "rb"):
-                if line.strip().decode("ascii") == "versions = None":
-                    f.write('versions = {}\n'.format(versions).encode("ascii"))
-                else:
-                    f.write(line)
-        self.scripts = [generated]
-        rc = build_scripts.run(self)
-        os.unlink(generated)
-        os.rmdir(tempdir)
-        return rc
-commands["build_scripts"] = my_build_scripts
-
 setup(
     name='git-annex-remote-googledrive',
     version=versioneer.get_version(),
-    cmdclass=commands,
     description='git annex special remote for Google Drive',
     long_description=readme(),
     long_description_content_type='text/markdown',
@@ -71,11 +50,12 @@ setup(
         'Programming Language :: Python :: 3.6',
     ],
     keywords='git-annex remote googledrive',
-    scripts=['git-annex-remote-googledrive'],
-
+    entry_points = {
+        'console_scripts': ['git-annex-remote-googledrive=git_annex_remote_googledrive.run:main'],
+    },
     install_requires=[
           'annexremote',
-          'pydrive',
+          'drivelib',
           'tenacity',
       ],
 )
