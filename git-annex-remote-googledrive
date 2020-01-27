@@ -98,8 +98,6 @@ class GoogleRemote(ExportRemote):
 
     def __init__(self, annex):
         super().__init__(annex)
-        self.presence_cache = dict()
-        self.state_cache = dict()
         self.chunksize = 1024**2*5
 
         self.gauth = json.dumps({
