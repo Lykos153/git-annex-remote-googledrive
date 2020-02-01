@@ -8,10 +8,13 @@
 #
 
 import sys, os
+import pathlib
 
+import git
 from annexremote import Master
 from annexremote import __version__ as annexremote_version
 from drivelib import __version__ as drivelib_version
+from drivelib import GoogleDrive
 from .google_remote import GoogleRemote
 from . import __version__
 
@@ -25,13 +28,45 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
+def _get_othertmp() -> os.PathLike:
+    git_repo = git.Repo(".", search_parent_directories=True)
+    git_root = pathlib.Path(git_repo.git.rev_parse("--show-toplevel"))
+    othertmp_dir = git_root / ".git/annex/othertmp"
+    othertmp_dir.mkdir(parents=True, exist_ok=True)
+    return othertmp_dir
+
+
+
+def setup():
+    print("======")
+    print("IMPORTANT: Google has started to lockdown their Google Drive API. This might affect access to your remotes.")
+    print("Until this is settled you'll see a warning about this application not being verified by Google which you need to accept in order to proceed.")
+    print("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
+    print("======")
+
+    gauth = {
+                'installed':
+                {
+                    'client_id': '275666578511-ndjt6mkns3vgb60cbo7csrjn6mbh8gbf.apps.googleusercontent.com',
+                    'client_secret': 'Den2tu08pRU4s5KeCp5whas_',
+                    'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
+                    'token_uri': 'https://accounts.google.com/o/oauth2/token',
+                    'revoke_uri': None,
+                    'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob',
+                }
+            }
+    creds = GoogleDrive.auth(gauth)
+
+    token_file = _get_othertmp() / "git-annex-remote-googledrive.token"
+    with token_file.open('w') as fp:
+        fp.write(creds)
+    print("Setup complete. An auth token was stored in .git/annex/othertmp. Now run 'git annex initremote' with your desired parameters. If you don't run it from the same folder, specify via token=path/to/token.json")
+        
+
 def main():
     if len(sys.argv) > 1:
         if sys.argv[1] == 'setup':
-            with open(os.devnull, 'w') as devnull:
-                master = Master(devnull)
-                remote = GoogleRemote(master)
-                remote.setup()
+            setup()
             return
         elif sys.argv[1] == 'version':
             print(os.path.basename(__file__), __version__)

@@ -9,6 +9,8 @@
 
 import os, traceback
 import json
+from pathlib import Path
+
 
 from . import __version__
 from annexremote import __version__ as annexremote_version
@@ -97,32 +99,6 @@ class GoogleRemote(annexremote.ExportRemote):
         super().__init__(annex)
         self.chunksize = 1024**2*5
 
-        self.gauth = {
-                        'installed':
-                        {
-                            'client_id': '275666578511-ndjt6mkns3vgb60cbo7csrjn6mbh8gbf.apps.googleusercontent.com',
-                            'client_secret': 'Den2tu08pRU4s5KeCp5whas_',
-                            'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
-                            'token_uri': 'https://accounts.google.com/o/oauth2/token',
-                            'revoke_uri': None,
-                            'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob',
-                        }
-                    }
-            
-
-    def setup(self):
-        print("======")
-        print("IMPORTANT: Google has started to lockdown their Google Drive API. This might affect access to your remotes.")
-        print("Until this is settled you'll see a warning about this application not being verified by Google which you need to accept in order to proceed.")
-        print("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
-        print("======")
-
-        creds = GoogleDrive.auth(self.gauth)
-        with open("token.json", 'w') as fp:
-            fp.write(creds)
-        #TODO: Store the token in the .git folder
-        print("Setup complete. An auth token was stored in token.json. Now run 'git annex initremote' with your desired parameters. If you don't run it from the same folder, specify via token=path/to/token.json")
-         
     def migrate(self, prefix):
         with open("token.json", 'r') as fp:
             creds = fp.read()
@@ -157,19 +133,16 @@ class GoogleRemote(annexremote.ExportRemote):
         if not prefix and not root_id:
             raise RemoteError("Either prefix or root_id must be given.")
 
-        token_file = self.annex.getconfig('token') or 'token.json'
+        git_root = Path(self.annex.getgitdir())
+        othertmp_dir = git_root / "annex/othertmp"
+        othertmp_dir.mkdir(parents=True, exist_ok=True)
+        token_file = othertmp_dir / "git-annex-remote-googledrive.token"
+
         try:
-            with open(token_file, 'r') as fp:
+            with token_file.open('r') as fp:
                 credentials = fp.read()
         except:
             credentials = None
-        if self.annex.getconfig('keep_token') != 'yes':
-            try:
-                os.remove(token_file)
-            except FileNotFoundError:
-                pass
-            except Exception as e:
-                self._info("Could not delete token file. {}".format(e))
 
         if credentials is None:
             credentials = self.annex.getcreds('credentials')['user']
