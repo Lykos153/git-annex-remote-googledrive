@@ -17,6 +17,9 @@ from drivelib import GoogleDrive
 from drivelib import DriveFile
 from drivelib import DriveFolder
 from drivelib import NotAuthenticatedError
+from drivelib import ResumableMediaUploadProgress, MediaDownloadProgress
+
+from googleapiclient.errors import HttpError
 
 class NotAFileError(Exception):
     pass
@@ -25,21 +28,24 @@ class HasSubdirError(Exception):
     pass
 
 class RemoteRootBase:
-    def __init__(self, rootfolder: DriveFolder):
+    def __init__(self, rootfolder: DriveFolder, uuid: str=None, git_dir: Union(str, PathLike)=None):
         self.folder = rootfolder
+        self.uuid = uuid
+        if git_dir is not None:
+            self.git_dir = Path(git_dir)
 
     @classmethod
-    def from_path(cls, creds_json, rootpath) -> cls:
+    def from_path(cls, creds_json, rootpath, *args, **kwargs) -> cls:
         drive = GoogleDrive(creds_json)
         root = drive.create_path(rootpath)
-        return cls(root)
+        return cls(root, *args, **kwargs)
 
     @classmethod
-    def from_id(cls, creds_json, root_id) -> cls:
+    def from_id(cls, creds_json, root_id, *args, **kwargs) -> cls:
         drive = GoogleDrive(creds_json)
         root = drive.item_by_id(root_id)
         if root.isfolder():
-            return cls(root)
+            return cls(root, *args, **kwargs)
         else:
             raise FileNotFoundError("ID {} is not a folder".format(root_id))
 
@@ -51,8 +57,8 @@ class RemoteRootBase:
         return self.folder.drive.json_creds()
 
 class RemoteRoot(RemoteRootBase):
-    def __init__(self, rootfolder):
-        super().__init__(rootfolder)
+    def __init__(self, rootfolder, uuid: str=None, git_dir: Union(str, PathLike)=None):
+        super().__init__(rootfolder, uuid=uuid, git_dir=git_dir)
         if next(self.folder.children(files=False), None):
             raise HasSubdirError()
         self._delete_test_keys()
@@ -61,15 +67,20 @@ class RemoteRoot(RemoteRootBase):
         remote_file = self.folder.child(key)
         if remote_file.isfolder():
             raise NotAFileError(key)
-        return Key(key, remote_file)
+        return Key(self, key, remote_file)
 
     def new_key(self, key: str) -> Key:
         try:
             self.get_key(key)
         except FileNotFoundError:
-            return Key(key, self.folder.new_file(key))
+            pass
+        except HttpError as e:
+            if e.resp.status != 308:
+                raise
         else:
             raise FileExistsError(key)
+
+        return Key(self, key, self.folder.new_file(key))
 
     def delete_key(self, key: str):
         try:
@@ -87,17 +98,50 @@ class RemoteRoot(RemoteRootBase):
             test_key.remove()
 
 class Key():
-    def __init__(self, key: str, remote_file: DriveFile):
+    def __init__(self, root: RemoteRootBase, key: str, remote_file: DriveFile):
+        self.root = root
         self.key = key
         self.file = remote_file
         self.resumable_uri = None
+        self.progress_handler = None
 
     def upload(self, local_filename: str, chunksize: int = None, progress_handler: callable = None):
-        # TODO. progress_handler should really just return progress, hiding anything specific to Google
-        self.file.upload(local_filename, chunksize=chunksize, resumable_uri=self.resumable_uri, progress_handler=progress_handler)
+        self.progress_handler = progress_handler
+        if not self.resumable_uri and self.root.git_dir and self.root.uuid:
+            uri_file = self.root.git_dir / "annex/remote-googledrive" / self.root.uuid / self.key
+            try:
+                with uri_file.open('r') as fh:
+                    self.resumable_uri = fh.read()
+            except FileNotFoundError:
+                resumable_uri = None
+        self.file.upload(local_filename, chunksize=chunksize, resumable_uri=self.resumable_uri, progress_handler=self._upload_progress)
+        try:
+            uri_file.unlink()
+        except NameError:
+            pass
+
+    def _upload_progress(self, progress: ResumableMediaUploadProgress):
+        if self.resumable_uri is None:
+            self.resumable_uri = progress.resumable_uri
+            if self.root.git_dir and self.root.uuid:
+                uri_root = self.root.git_dir / "annex/remote-googledrive" / self.root.uuid
+                uri_root.mkdir(parents=True, exist_ok=True)
+                uri_file = uri_root / self.key
+                with uri_file.open('w') as fh:
+                    fh.write(self.resumable_uri)
+
+        if self.progress_handler:
+            self.progress_handler(progress.resumable_progress)
 
     def download(self, local_filename: str, chunksize: int = None, progress_handler: callable = None):
-        self.file.download(local_filename, chunksize=chunksize, progress_handler=progress_handler)
+        self.progress_handler = progress_handler
+        self.file.download(local_filename, chunksize=chunksize, progress_handler=self._download_progress)
+
+    def _download_progress(self, progress: MediaDownloadProgress):
+        if self.progress_handler:
+            self.progress_handler(progress.resumable_progress)
+
+
 
 class ExportRemoteRoot(RemoteRootBase):
     def get_key(self, key: str, remote_path: Union(str, PathLike)) -> ExportKey:
@@ -105,7 +149,7 @@ class ExportRemoteRoot(RemoteRootBase):
         remote_file = self.folder.child_from_path(str(remote_path))
         if remote_file.isfolder():
             raise NotAFileError(str(remote_path))
-        return ExportKey(key, remote_path, remote_file)
+        return ExportKey(self, key, remote_path, remote_file)
 
     def new_key(self, key: str, remote_path: Union(str, PathLike)) -> ExportKey:
         remote_path = PurePath(remote_path)
@@ -114,7 +158,7 @@ class ExportRemoteRoot(RemoteRootBase):
         except FileNotFoundError:
             parent = self.folder.create_path(str(remote_path.parent))
             remote_file = parent.new_file(remote_path.name)
-            return ExportKey(key, remote_path, remote_file)
+            return ExportKey(self, key, remote_path, remote_file)
         else:
             raise FileExistsError(remote_path)
             
@@ -141,10 +185,9 @@ class ExportRemoteRoot(RemoteRootBase):
             raise NotADirectoryError
         remote_folder.remove()
 
-
 class ExportKey(Key):
-    def __init__(self, key: str, path: Union(str, PathLike), remote_file: DriveFile):
-        super().__init__(key, remote_file)
+    def __init__(self, root: ExportRemoteRoot, key: str, path: Union(str, PathLike), remote_file: DriveFile):
+        super().__init__(root, key, remote_file)
         self.path = PurePath(path)
 
 class MigrationRoot(RemoteRootBase):

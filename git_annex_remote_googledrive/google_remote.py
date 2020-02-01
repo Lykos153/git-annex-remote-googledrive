@@ -107,11 +107,13 @@ class GoogleRemote(annexremote.ExportRemote):
         return root.migrate()
 
     def _get_root(self, RootClass, creds, prefix=None, root_id=None):
+        uuid = self.annex.getuuid()
+        git_dir = Path(self.annex.getgitdir())
         try:
             if prefix:
-                return RootClass.from_path(creds, prefix)
+                return RootClass.from_path(creds, prefix, uuid=uuid, git_dir=git_dir)
             else:
-                return RootClass.from_id(creds, root_id)
+                return RootClass.from_id(creds, root_id, uuid=uuid, git_dir=git_dir)
         except JSONDecodeError:
             raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
         except (NotAuthenticatedError, RefreshError):
@@ -184,7 +186,7 @@ class GoogleRemote(annexremote.ExportRemote):
             self.root.new_key(key).upload(
                         fpath, 
                         chunksize=self.chunksize,
-                        progress_handler=self._progress)
+                        progress_handler=self.annex.progress)
 
     @send_traceback
     @retry(**retry_conditions)
@@ -193,7 +195,7 @@ class GoogleRemote(annexremote.ExportRemote):
         self.root.get_key(key).download(
                     fpath, 
                     chunksize=self.chunksize,
-                    progress_handler=self._progress)
+                    progress_handler=self.annex.progress)
     
     @send_traceback
     @retry(**retry_conditions)
@@ -219,7 +221,7 @@ class GoogleRemote(annexremote.ExportRemote):
         self.root.new_key(key, name).upload(
                 fpath,
                 chunksize=self.chunksize,
-                progress_handler=self._progress
+                progress_handler=self.annex.progress
         )
 
     @send_traceback
@@ -229,7 +231,7 @@ class GoogleRemote(annexremote.ExportRemote):
         self.root.get_key(key, name).download(
             fpath,
             chunksize=self.chunksize,
-            progress_handler=self._progress
+            progress_handler=self.annex.progress
         )
 
     @send_traceback
@@ -263,9 +265,6 @@ class GoogleRemote(annexremote.ExportRemote):
     def renameexport(self, key, name, new_name):
         self.root.rename_key(key, name, new_name)
             
-    def _progress(self, progress):
-        self.annex.progress(progress.resumable_progress)
-
     def _splitpath(self, filename):
         splitpath = filename.rsplit('/', 1)
         exportfile = dict()
