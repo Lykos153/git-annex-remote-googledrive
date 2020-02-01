@@ -17,7 +17,7 @@ from drivelib import __version__ as drivelib_version
 from .keys import RemoteRoot, Key
 from .keys import ExportRemoteRoot, ExportKey
 from .keys import MigrationRoot
-from .keys import HasSubdirError, NotAFileError
+from .keys import HasSubdirError, NotAFileError, NotAuthenticatedError
 
 
 from oauth2client.client import OAuth2Credentials

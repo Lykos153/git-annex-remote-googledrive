@@ -80,10 +80,10 @@ class RemoteRoot(RemoteRootBase):
     def _delete_test_keys(self):
         query = "'{root_id}' in parents and \
                     name contains 'this-is-a-test-key'".format(
-                    root_id=root.id
+                    root_id=self.folder.id
                     )
 
-        for test_key in root.folder.drive.items_by_query(query):
+        for test_key in self.folder.drive.items_by_query(query):
             test_key.remove()
 
 class Key():
