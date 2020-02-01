@@ -14,6 +14,8 @@ from . import __version__
 from annexremote import __version__ as annexremote_version
 from drivelib import __version__ as drivelib_version
 
+from drivelib import GoogleDrive
+
 from .keys import RemoteRoot, Key
 from .keys import ExportRemoteRoot, ExportKey
 from .keys import MigrationRoot
@@ -95,7 +97,7 @@ class GoogleRemote(annexremote.ExportRemote):
         super().__init__(annex)
         self.chunksize = 1024**2*5
 
-        self.gauth = json.dumps({
+        self.gauth = {
                         'installed':
                         {
                             'client_id': '275666578511-ndjt6mkns3vgb60cbo7csrjn6mbh8gbf.apps.googleusercontent.com',
@@ -105,7 +107,7 @@ class GoogleRemote(annexremote.ExportRemote):
                             'revoke_uri': None,
                             'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob',
                         }
-                    })
+                    }
             
 
     def setup(self):
