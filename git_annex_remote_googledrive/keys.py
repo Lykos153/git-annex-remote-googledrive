@@ -16,7 +16,7 @@ from os import PathLike
 from drivelib import GoogleDrive
 from drivelib import DriveFile
 from drivelib import DriveFolder
-from drivelib import NotAuthenticatedError
+from drivelib import NotAuthenticatedError, CheckSumError
 from drivelib import ResumableMediaUploadProgress, MediaDownloadProgress
 
 from googleapiclient.errors import HttpError
@@ -102,33 +102,46 @@ class Key():
         self.root = root
         self.key = key
         self.file = remote_file
-        self.resumable_uri = None
+        self._resumable_uri = None
         self.progress_handler = None
 
     def upload(self, local_filename: str, chunksize: int = None, progress_handler: callable = None):
         self.progress_handler = progress_handler
-        if not self.resumable_uri and self.root.git_dir and self.root.uuid:
+
+        try:
+            self.file.upload(local_filename, chunksize=chunksize, resumable_uri=self.resumable_uri, progress_handler=self._upload_progress)
+        except CheckSumError:
+            self.resumable_uri = None
+            self.file.upload(local_filename, chunksize=chunksize, progress_handler=self._upload_progress)
+        self.resumable_uri = None
+
+    @property
+    def resumable_uri(self) -> str:
+        if not self._resumable_uri and self.root.git_dir and self.root.uuid:
             uri_file = self.root.git_dir / "annex/remote-googledrive" / self.root.uuid / self.key
             try:
                 with uri_file.open('r') as fh:
-                    self.resumable_uri = fh.read()
+                    self._resumable_uri = fh.read()
             except FileNotFoundError:
-                resumable_uri = None
-        self.file.upload(local_filename, chunksize=chunksize, resumable_uri=self.resumable_uri, progress_handler=self._upload_progress)
-        try:
-            uri_file.unlink()
-        except NameError:
-            pass
+                pass
+        return self._resumable_uri
+
+    @resumable_uri.setter
+    def resumable_uri(self, resumable_uri: str):
+        self._resumable_uri = resumable_uri
+        if self.root.git_dir and self.root.uuid:
+            uri_root = self.root.git_dir / "annex/remote-googledrive" / self.root.uuid
+            uri_file = uri_root / self.key
+            if self._resumable_uri is None:
+                uri_file.unlink(missing_ok=True)
+            else:
+                uri_root.mkdir(parents=True, exist_ok=True)
+                with uri_file.open('w') as fh:
+                    fh.write(self._resumable_uri)
 
     def _upload_progress(self, progress: ResumableMediaUploadProgress):
         if self.resumable_uri is None:
             self.resumable_uri = progress.resumable_uri
-            if self.root.git_dir and self.root.uuid:
-                uri_root = self.root.git_dir / "annex/remote-googledrive" / self.root.uuid
-                uri_root.mkdir(parents=True, exist_ok=True)
-                uri_file = uri_root / self.key
-                with uri_file.open('w') as fh:
-                    fh.write(self.resumable_uri)
 
         if self.progress_handler:
             self.progress_handler(progress.resumable_progress)
