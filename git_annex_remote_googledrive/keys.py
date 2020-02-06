@@ -103,16 +103,21 @@ class Key():
         self.key = key
         self.file = remote_file
         self._resumable_uri = None
-        self.progress_handler = None
 
     def upload(self, local_filename: str, chunksize: int = None, progress_handler: callable = None):
-        self.progress_handler = progress_handler
 
         try:
-            self.file.upload(local_filename, chunksize=chunksize, resumable_uri=self.resumable_uri, progress_handler=self._upload_progress)
+            self.file.upload(local_filename,
+                             chunksize=chunksize,
+                             resumable_uri=self.resumable_uri,
+                             progress_handler=self._upload_progress(progress_handler)
+                            )
         except CheckSumError:
             self.resumable_uri = None
-            self.file.upload(local_filename, chunksize=chunksize, progress_handler=self._upload_progress)
+            self.file.upload(local_filename,
+                             chunksize=chunksize,
+                             progress_handler=self._upload_progress(progress_handler)
+                            )
         self.resumable_uri = None
 
     @property
@@ -139,12 +144,14 @@ class Key():
                 with uri_file.open('w') as fh:
                     fh.write(self._resumable_uri)
 
-    def _upload_progress(self, progress: ResumableMediaUploadProgress):
-        if self.resumable_uri is None:
-            self.resumable_uri = progress.resumable_uri
+    def _upload_progress(self, progress_handler: callable = None):
+        def fun(progress: ResumableMediaUploadProgress):
+            if self.resumable_uri is None:
+                self.resumable_uri = progress.resumable_uri
 
-        if self.progress_handler:
-            self.progress_handler(progress.resumable_progress)
+            if progress_handler:
+                progress_handler(progress.resumable_progress)
+        return fun
 
     def download(self, local_filename: str, chunksize: int = None, progress_handler: callable = None):
         self.progress_handler = progress_handler
