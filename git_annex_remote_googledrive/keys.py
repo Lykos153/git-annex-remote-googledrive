@@ -21,6 +21,8 @@ from drivelib import ResumableMediaUploadProgress, MediaDownloadProgress
 
 from googleapiclient.errors import HttpError
 
+import logging
+
 class NotAFileError(Exception):
     pass
 
@@ -113,6 +115,7 @@ class Key():
                              progress_handler=self._upload_progress(progress_handler)
                             )
         except CheckSumError:
+            logging.warning("Checksum mismatch. Repeating upload")
             self.resumable_uri = None
             self.file.upload(local_filename,
                              chunksize=chunksize,
@@ -127,6 +130,8 @@ class Key():
             try:
                 with uri_file.open('r') as fh:
                     self._resumable_uri = fh.read()
+                logging.info("Found resumable_uri in %s", str(uri_file))
+                logging.debug("resumable_uri: %s", self._resumable_uri)
             except FileNotFoundError:
                 pass
         return self._resumable_uri
@@ -136,13 +141,16 @@ class Key():
         self._resumable_uri = resumable_uri
         if self.root.git_dir and self.root.uuid:
             uri_root = self.root.git_dir / "annex/remote-googledrive" / self.root.uuid
+        logging.info("New resumable_uri: %s", self._resumable_uri)
             uri_file = uri_root / self.key
             if self._resumable_uri is None:
                 uri_file.unlink(missing_ok=True)
+                logging.info("Deleted %s", str(uri_file))
             else:
                 uri_root.mkdir(parents=True, exist_ok=True)
                 with uri_file.open('w') as fh:
                     fh.write(self._resumable_uri)
+                logging.info("Stored resumable_uri in %s", str(uri_file))
 
     def _upload_progress(self, progress_handler: callable = None):
         def fun(progress: ResumableMediaUploadProgress):
