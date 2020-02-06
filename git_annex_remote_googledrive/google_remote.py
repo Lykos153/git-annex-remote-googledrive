@@ -110,8 +110,7 @@ class GoogleRemote(annexremote.ExportRemote):
         return root.migrate()
 
     def _get_root(self, RootClass, creds, prefix=None, root_id=None):
-        self.uuid = self.annex.getuuid()
-        self.local_appdir = Path(self.annex.getgitdir()) / "annex/git-annex-remote-googledrive"
+        #TODO: Maybe implement as property, too
         try:
             if prefix:
                 return RootClass.from_path(creds, prefix, uuid=self.uuid, local_appdir=self.local_appdir)
@@ -134,6 +133,17 @@ class GoogleRemote(annexremote.ExportRemote):
         if not hasattr(self, '_encryption'):
             self._encryption = self.annex.getconfig('encryption')
         return self._encryption
+
+    @property
+    def uuid(self):
+        if not hasattr(self, '_uuid'):
+            self._uuid = self.annex.getuuid()
+        return self._uuid
+
+    @property
+    def local_appdir(self):
+        if not hasattr(self, '_local_appdir'):
+            self._local_appdir = Path(self.annex.getgitdir()) / "annex/git-annex-remote-googledrive"
 
     @send_traceback
     def initremote(self):
