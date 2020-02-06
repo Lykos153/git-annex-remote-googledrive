@@ -30,11 +30,11 @@ class HasSubdirError(Exception):
     pass
 
 class RemoteRootBase:
-    def __init__(self, rootfolder: DriveFolder, uuid: str=None, git_dir: Union(str, PathLike)=None):
+    def __init__(self, rootfolder: DriveFolder, uuid: str=None, local_appdir: Union(str, PathLike)=None):
         self.folder = rootfolder
         self.uuid = uuid
-        if git_dir is not None:
-            self.git_dir = Path(git_dir)
+        if local_appdir is not None:
+            self.local_appdir = Path(local_appdir)
 
     @classmethod
     def from_path(cls, creds_json, rootpath, *args, **kwargs) -> cls:
@@ -59,8 +59,8 @@ class RemoteRootBase:
         return self.folder.drive.json_creds()
 
 class RemoteRoot(RemoteRootBase):
-    def __init__(self, rootfolder, uuid: str=None, git_dir: Union(str, PathLike)=None):
-        super().__init__(rootfolder, uuid=uuid, git_dir=git_dir)
+    def __init__(self, rootfolder, uuid: str=None, local_appdir: Union(str, PathLike)=None):
+        super().__init__(rootfolder, uuid=uuid, local_appdir=local_appdir)
         if next(self.folder.children(files=False), None):
             raise HasSubdirError()
         self._delete_test_keys()
@@ -125,8 +125,8 @@ class Key():
 
     @property
     def resumable_uri(self) -> str:
-        if not self._resumable_uri and self.root.git_dir and self.root.uuid:
-            uri_file = self.root.git_dir / "annex/remote-googledrive" / self.root.uuid / self.key
+        if not self._resumable_uri and self.root.local_appdir and self.root.uuid:
+            uri_file = self.root.local_appdir / self.root.uuid / self.key
             try:
                 with uri_file.open('r') as fh:
                     self._resumable_uri = fh.read()
@@ -139,9 +139,9 @@ class Key():
     @resumable_uri.setter
     def resumable_uri(self, resumable_uri: str):
         self._resumable_uri = resumable_uri
-        if self.root.git_dir and self.root.uuid:
-            uri_root = self.root.git_dir / "annex/remote-googledrive" / self.root.uuid
         logging.info("New resumable_uri: %s", self._resumable_uri)
+        if self.root.local_appdir and self.root.uuid:
+            uri_root = self.root.local_appdir / self.root.uuid
             uri_file = uri_root / self.key
             if self._resumable_uri is None:
                 uri_file.unlink(missing_ok=True)

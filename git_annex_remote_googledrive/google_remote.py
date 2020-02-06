@@ -40,6 +40,9 @@ from tenacity import stop_after_attempt
 import annexremote
 from annexremote import RemoteError
 
+from pathlib import Path
+import logging
+
 def NotAFolderError(Exception):
     pass
 
@@ -107,13 +110,13 @@ class GoogleRemote(annexremote.ExportRemote):
         return root.migrate()
 
     def _get_root(self, RootClass, creds, prefix=None, root_id=None):
-        uuid = self.annex.getuuid()
-        git_dir = Path(self.annex.getgitdir())
+        self.uuid = self.annex.getuuid()
+        self.local_appdir = Path(self.annex.getgitdir()) / "annex/git-annex-remote-googledrive"
         try:
             if prefix:
-                return RootClass.from_path(creds, prefix, uuid=uuid, git_dir=git_dir)
+                return RootClass.from_path(creds, prefix, uuid=self.uuid, local_appdir=self.local_appdir)
             else:
-                return RootClass.from_id(creds, root_id, uuid=uuid, git_dir=git_dir)
+                return RootClass.from_id(creds, root_id, uuid=self.uuid, local_appdir=self.local_appdir)
         except JSONDecodeError:
             raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
         except (NotAuthenticatedError, RefreshError):
@@ -126,6 +129,11 @@ class GoogleRemote(annexremote.ExportRemote):
         except Exception as e:
             raise RemoteError("Failed to connect with Google. Please check your internet connection.", e)
 
+    @property
+    def encryption(self):
+        if not hasattr(self, '_encryption'):
+            self._encryption = self.annex.getconfig('encryption')
+        return self._encryption
 
     @send_traceback
     def initremote(self):
@@ -180,13 +188,27 @@ class GoogleRemote(annexremote.ExportRemote):
     @retry(**retry_conditions)
     @connect()
     def transfer_store(self, key, fpath):
+        fpath = Path(fpath)
+        new_path = self.local_appdir / self.uuid / "tmp" / key
+        if new_path.exists():
+            logging.debug("Found key in appdir: %s", str(new_path))
+            upload_path = new_path
+        elif self.encryption != "none":
+            logging.debug("Encrypted remote. Moving key to %s", str(new_path))
+            new_path.parent.mkdir(parents=True, exist_ok=True)
+            fpath.rename(new_path)
+            upload_path = new_path
+        else:
+            upload_path = fpath
+
         try:
             self.root.get_key(key)
         except FileNotFoundError:
             self.root.new_key(key).upload(
-                        fpath, 
+                        str(upload_path), 
                         chunksize=self.chunksize,
                         progress_handler=self.annex.progress)
+            new_path.unlink(missing_ok=True)
 
     @send_traceback
     @retry(**retry_conditions)
