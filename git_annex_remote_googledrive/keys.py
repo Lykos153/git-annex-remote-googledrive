@@ -126,7 +126,7 @@ class Key():
     @property
     def resumable_uri(self) -> str:
         if not self._resumable_uri and self.root.local_appdir and self.root.uuid:
-            uri_file = self.root.local_appdir / self.root.uuid / self.key
+            uri_file = self.root.local_appdir / self.root.uuid / "resume" / self.key
             try:
                 with uri_file.open('r') as fh:
                     self._resumable_uri = fh.read()
@@ -141,13 +141,12 @@ class Key():
         self._resumable_uri = resumable_uri
         logging.info("New resumable_uri: %s", self._resumable_uri)
         if self.root.local_appdir and self.root.uuid:
-            uri_root = self.root.local_appdir / self.root.uuid
-            uri_file = uri_root / self.key
+            uri_file = self.root.local_appdir / self.root.uuid / "resume" / self.key
             if self._resumable_uri is None:
                 uri_file.unlink(missing_ok=True)
                 logging.info("Deleted %s", str(uri_file))
             else:
-                uri_root.mkdir(parents=True, exist_ok=True)
+                uri_file.parent.mkdir(parents=True, exist_ok=True)
                 with uri_file.open('w') as fh:
                     fh.write(self._resumable_uri)
                 logging.info("Stored resumable_uri in %s", str(uri_file))

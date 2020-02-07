@@ -143,7 +143,7 @@ class GoogleRemote(annexremote.ExportRemote):
     @property
     def local_appdir(self):
         if not hasattr(self, '_local_appdir'):
-            self._local_appdir = Path(self.annex.getgitdir()) / "annex/git-annex-remote-googledrive"
+            self._local_appdir = Path(self.annex.getgitdir()) / "annex/remote-googledrive"
         return self._local_appdir
 
     @send_traceback
