@@ -114,8 +114,14 @@ class Key():
                              resumable_uri=self.resumable_uri,
                              progress_handler=self._upload_progress(progress_handler)
                             )
-        except CheckSumError:
-            logging.warning("Checksum mismatch. Repeating upload")
+        except (CheckSumError, HttpError) as e:
+            if isinstance(e, CheckSumError):
+                logging.warning("Checksum mismatch. Repeating upload")
+            elif isinstance(e, HttpError) and e.resp['status'] == '404':
+                logging.warning("Invalid resumable_uri. Probably expired. Repeating upload.")
+            else:
+                raise
+
             self.resumable_uri = None
             self.file.upload(local_filename,
                              chunksize=chunksize,
