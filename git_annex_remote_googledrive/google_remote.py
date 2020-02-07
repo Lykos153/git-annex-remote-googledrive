@@ -212,14 +212,11 @@ class GoogleRemote(annexremote.ExportRemote):
         else:
             upload_path = fpath
 
-        try:
-            self.root.get_key(key)
-        except FileNotFoundError:
-            self.root.new_key(key).upload(
+        self.root.new_key(key).upload(
                         str(upload_path), 
                         chunksize=self.chunksize,
                         progress_handler=self.annex.progress)
-            new_path.unlink(missing_ok=True)
+        new_path.unlink(missing_ok=True)
 
     @send_traceback
     @retry(**retry_conditions)
