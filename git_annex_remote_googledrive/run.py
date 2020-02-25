@@ -30,8 +30,8 @@ class bcolors:
 
 def _get_othertmp() -> os.PathLike:
     git_repo = git.Repo(".", search_parent_directories=True)
-    git_root = pathlib.Path(git_repo.git.rev_parse("--show-toplevel"))
-    othertmp_dir = git_root / ".git/annex/othertmp"
+    git_root = pathlib.Path(git_repo.git.rev_parse("--git-dir"))
+    othertmp_dir = git_root / "annex/othertmp"
     othertmp_dir.mkdir(parents=True, exist_ok=True)
     return othertmp_dir
 
