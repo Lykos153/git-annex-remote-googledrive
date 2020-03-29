@@ -7,7 +7,7 @@
 # warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 #
 
-import os, traceback
+import os, traceback, sys
 import json
 from pathlib import Path
 
@@ -41,6 +41,7 @@ from tenacity import stop_after_attempt
 
 import annexremote
 from annexremote import RemoteError
+from annexremote import ProtocolError
 
 from pathlib import Path
 import logging
