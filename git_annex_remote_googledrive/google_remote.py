@@ -160,6 +160,21 @@ class GoogleRemote(annexremote.ExportRemote):
             self._local_appdir = Path(self.annex.getgitdir()) / "annex/remote-googledrive"
         return self._local_appdir
 
+    @property
+    def info(self):
+        return_dict = {}
+        prefix = self.annex.getconfig("prefix")
+        if prefix:
+            return_dict['remote prefix'] = prefix
+        else:
+            return_dict['remote root-id'] = self.annex.getconfig("root_id")
+        return return_dict
+
+    @info.setter
+    def info(self, info):
+        pass
+        
+
     @send_traceback
     def initremote(self):
         self._send_version()
