@@ -18,6 +18,7 @@ from drivelib import DriveFile
 from drivelib import DriveFolder
 from drivelib import NotAuthenticatedError, CheckSumError
 from drivelib import ResumableMediaUploadProgress, MediaDownloadProgress
+from drivelib import AmbiguousPathError
 
 from googleapiclient.errors import HttpError
 
@@ -66,7 +67,17 @@ class RemoteRoot(RemoteRootBase):
         self._delete_test_keys()
 
     def get_key(self, key: str) -> Key:
-        remote_file = self.folder.child(key)
+        try:
+            remote_file = self.folder.child(key)
+        except AmbiguousPathError:
+            files = self.folder.children(name=key)
+            remote_file = next(files)
+            for current_file in files:
+                if current_file.md5sum == remote_file.md5sum:
+                    current_file.remove()
+                else:
+                    raise
+            
         if remote_file.isfolder():
             raise NotAFileError(key)
         return Key(self, key, remote_file)
