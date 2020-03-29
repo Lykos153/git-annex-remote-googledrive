@@ -104,6 +104,17 @@ class GoogleRemote(annexremote.ExportRemote):
     def __init__(self, annex):
         super().__init__(annex)
         self.chunksize = 1024**2*5
+        self.configs = {
+            'prefix': "The path to the folder that will be used for the remote."
+                        " If it doesn't exist, it will be created.",
+            'root_id': "Instead of the path, you can specify the ID of a folder."
+                        " The folder must already exist. This will make it independent"
+                        " from the path and it will always be found by git-annex, no matter"
+                        " where you move it. Can also be used to access shared folders"
+                        " which you haven't added to 'My Drive'."
+                        " Note: If both are given, `prefix` is preferred. You can unset"
+                        " `prefix` by setting it to the empty string ('prefix=\"\"').",
+        }
 
     def migrate(self, prefix):
         with open("token.json", 'r') as fp:
