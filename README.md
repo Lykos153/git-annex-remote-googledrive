@@ -9,6 +9,7 @@ git-annex-remote-googledrive adds direct and fast support for Google Drive to gi
 * [exporttree remotes](https://git-annex.branchable.com/git-annex-export)
 * storing the credentials within the repository
 * using different Google accounts simultaniously (even within the same repository)
+* truly resumable uploads and downloads
 * ... a lot more to come, see [Issues](https://github.com/Lykos153/git-annex-remote-googledrive/issues)
 
 ## Installation
