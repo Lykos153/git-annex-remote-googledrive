@@ -374,20 +374,3 @@ class GoogleRemote(annexremote.ExportRemote):
             self.annex.info(message)
         except ProtocolError:
             print(message, file=sys.stderr)
-    
-    def _get_key_info(self, key, field):
-        if key not in self.state_cache or field not in self.state_cache[key]:
-            try:
-                self.state_cache[key] = json.loads(self.annex.getstate(key))
-            except:
-                self.state_cache[key] = {field: None}
-        return self.state_cache[key][field]
-            
-    def _set_key_info(self, key, field, value):
-        if self._get_key_info(key, field) != value:
-            self.state_cache[key][field] = value
-            self.annex.setstate(key, 
-                                json.dumps(
-                                    self.state_cache[key],
-                                    separators=(',', ':')
-                                ))
