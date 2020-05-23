@@ -58,5 +58,6 @@ setup(
           'drivelib',
           'gitpython',
           'tenacity',
+          'humanfriendly',
       ],
 )

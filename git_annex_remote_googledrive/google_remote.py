@@ -46,6 +46,8 @@ from annexremote import ProtocolError
 from pathlib import Path
 import logging
 
+import humanfriendly
+
 def NotAFolderError(Exception):
     pass
 
@@ -103,7 +105,7 @@ class GoogleRemote(annexremote.ExportRemote):
 
     def __init__(self, annex):
         super().__init__(annex)
-        self.chunksize = 1024**2*5
+        self.DEFAULT_CHUNKSIZE = "5MiB"
         self.configs = {
             'prefix': "The path to the folder that will be used for the remote."
                         " If it doesn't exist, it will be created.",
@@ -114,6 +116,16 @@ class GoogleRemote(annexremote.ExportRemote):
                         " which you haven't added to 'My Drive'."
                         " Note: If both are given, `prefix` is preferred. You can unset"
                         " `prefix` by setting it to the empty string ('prefix=\"\"').",
+            'transferchunk' :
+                        "Chunksize used for transfers. This is the minimum data which"
+                        "has to be retransmitted when resuming after a connection error."
+                        "This also affects the progress display. It has to be distinguished"
+                        "from `chunk`. A value between 1MiB and 10MiB is recommended."
+                        "Smaller values meaning less data to be re-transmitted when network"
+                        "connectivity is interrupted and result in a finer progress feedback."
+                        "Bigger values create slightly less overhead and are therefore"
+                        "somewhat more efficient."
+                        "Default: {}".format(self.DEFAULT_CHUNKSIZE)
         }
 
     def migrate(self, prefix):
@@ -174,6 +186,17 @@ class GoogleRemote(annexremote.ExportRemote):
     def info(self, info):
         pass
         
+    @property
+    def chunksize(self):
+        if not hasattr(self, '_chunksize'):
+            try:
+                transferchunk = self.annex.getconfig('transferchunk')
+                self._chunksize = humanfriendly.parse_size(transferchunk)
+                self.annex.debug("Using chunksize: {}".format(transferchunk))
+            except humanfriendly.InvalidSize:
+                self.annex.debug("No valid chunksize specified. Using default value: {}".format(self.DEFAULT_CHUNKSIZE))
+                self._chunksize = humanfriendly.parse_size(self.DEFAULT_CHUNKSIZE)
+        return self._chunksize
 
     @send_traceback
     def initremote(self):
