@@ -29,6 +29,7 @@ def readme():
 setup(
     name='git-annex-remote-googledrive',
     version=versioneer.get_version(),
+    packages=['git_annex_remote_googledrive'],
     description='git annex special remote for Google Drive',
     long_description=readme(),
     long_description_content_type='text/markdown',
@@ -55,7 +56,7 @@ setup(
     },
     install_requires=[
           'annexremote',
-          'drivelib',
+          'drivelib==0.1.4',
           'gitpython',
           'tenacity',
           'humanfriendly',
