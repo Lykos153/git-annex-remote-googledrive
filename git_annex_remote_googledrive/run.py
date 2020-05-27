@@ -38,6 +38,11 @@ def _get_othertmp() -> os.PathLike:
 
 
 def setup():
+    try:
+        token_file = _get_othertmp() / "git-annex-remote-googledrive.token"
+    except git.exc.InvalidGitRepositoryError:
+        print("ERROR: Needs to be run inside a git repository.")
+        return
     print("======")
     print("IMPORTANT: Google has started to lockdown their Google Drive API. This might affect access to your remotes.")
     print("Until this is settled you'll see a warning about this application not being verified by Google which you need to accept in order to proceed.")
