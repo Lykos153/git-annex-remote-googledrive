@@ -11,6 +11,8 @@ import sys, os
 import pathlib
 
 import git
+import signal
+
 from annexremote import Master
 from annexremote import __version__ as annexremote_version
 from drivelib import __version__ as drivelib_version
@@ -35,6 +37,9 @@ def _get_othertmp() -> os.PathLike:
     othertmp_dir.mkdir(parents=True, exist_ok=True)
     return othertmp_dir
 
+def _shutdown(signum, frame):
+    print("Aborted by user")
+    raise SystemExit
 
 
 def setup():
@@ -62,13 +67,14 @@ def setup():
             }
     creds = GoogleDrive.auth(gauth)
 
-    token_file = _get_othertmp() / "git-annex-remote-googledrive.token"
     with token_file.open('w') as fp:
         fp.write(creds)
     print("Setup complete. An auth token was stored in .git/annex/othertmp. Now run 'git annex initremote' with your desired parameters. If you don't run it from the same folder, specify via token=path/to/token.json")
         
 
 def main():
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
     if len(sys.argv) > 1:
         if sys.argv[1] == 'setup':
             setup()
