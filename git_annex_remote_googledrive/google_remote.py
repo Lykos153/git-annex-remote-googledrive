@@ -126,6 +126,7 @@ class GoogleRemote(annexremote.ExportRemote):
                         "Default: {}".format(self.DEFAULT_CHUNKSIZE),
             'mute-api-lockdown-warning':
                         "Set to 'true' if you don't want to see the warning.",
+            'token':    "Token file that was created by `git-annex-remote-googledrive setup`",
         }
 
     def migrate(self, prefix):
@@ -218,10 +219,14 @@ class GoogleRemote(annexremote.ExportRemote):
         if not prefix and not root_id:
             raise RemoteError("Either prefix or root_id must be given.")
 
-        git_root = Path(self.annex.getgitdir())
-        othertmp_dir = git_root / "annex/othertmp"
-        othertmp_dir.mkdir(parents=True, exist_ok=True)
-        token_file = othertmp_dir / "git-annex-remote-googledrive.token"
+        token_config = self.annex.getconfig('token')
+        if token_config:
+            token_file = Path(token_config)
+        else:
+            git_root = Path(self.annex.getgitdir())
+            othertmp_dir = git_root / "annex/othertmp"
+            othertmp_dir.mkdir(parents=True, exist_ok=True)
+            token_file = othertmp_dir / "git-annex-remote-googledrive.token"
 
         try:
             with token_file.open('r') as fp:
@@ -242,7 +247,7 @@ class GoogleRemote(annexremote.ExportRemote):
             except HasSubdirError:
                 raise RemoteError("Specified folder has subdirectories. Are you sure 'prefix' or 'id' is set correctly? In case you're migrating from gdrive or rclone, run 'git-annex-remote-googledrive migrate {prefix}' first.".format(prefix=prefix))
         
-
+        self.annex.setconfig('token', "")
         self.annex.setconfig('root_id', self.root.id)
         self.credentials = ''.join(self.root.json_creds().split())
 
