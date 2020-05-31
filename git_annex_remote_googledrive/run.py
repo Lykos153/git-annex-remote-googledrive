@@ -9,6 +9,7 @@
 
 import sys, os
 import pathlib
+import distutils.util
 
 import git
 import signal
@@ -48,17 +49,35 @@ def setup():
     except git.exc.InvalidGitRepositoryError:
         print("ERROR: Needs to be run inside a git repository.")
         return
-    print("======")
-    print("IMPORTANT: Google has started to lockdown their Google Drive API. This might affect access to your remotes.")
-    print("Until this is settled you'll see a warning about this application not being verified by Google which you need to accept in order to proceed.")
-    print("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
-    print("======")
+
+    print(  "You can enter your own API key or use the built-in one.\n"
+            "The built-in API key is potentially slower as more people\n"
+            "are using it. Also, it might be blocked due to it not (yet)\n"
+            "being verified by Google. ")
+
+    try:
+        use_own_api = distutils.util.strtobool(input("Do you want to use your own API key? (y/N)").lower())
+    except ValueError:
+        use_own_api = False
+
+    if use_own_api:
+        client_id = input("Client ID: ")
+        client_secret = input("Client Secret: ")
+    else:
+        print("======")
+        print("IMPORTANT: Google has started to lockdown their Google Drive API. This might affect access to your remotes.")
+        print("Until this is settled you'll see a warning about this application not being verified by Google which you need to accept in order to proceed.")
+        print("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
+        print("======")
+        client_id = '275666578511-ndjt6mkns3vgb60cbo7csrjn6mbh8gbf.apps.googleusercontent.com'
+        client_secret = 'Den2tu08pRU4s5KeCp5whas_'
+
 
     gauth = {
                 'installed':
                 {
-                    'client_id': '275666578511-ndjt6mkns3vgb60cbo7csrjn6mbh8gbf.apps.googleusercontent.com',
-                    'client_secret': 'Den2tu08pRU4s5KeCp5whas_',
+                    'client_id': client_id,
+                    'client_secret': client_secret,
                     'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
                     'token_uri': 'https://accounts.google.com/o/oauth2/token',
                     'revoke_uri': None,
