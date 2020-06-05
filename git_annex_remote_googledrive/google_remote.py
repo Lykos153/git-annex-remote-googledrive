@@ -114,7 +114,7 @@ class GoogleRemote(annexremote.ExportRemote):
                         " which you haven't added to 'My Drive'."
                         " Note: If both are given, `prefix` is preferred. You can unset"
                         " `prefix` by setting it to the empty string ('prefix=\"\"').",
-            'transferchunk' :
+            'transferchunk':
                         "Chunksize used for transfers. This is the minimum data which"
                         "has to be retransmitted when resuming after a connection error."
                         "This also affects the progress display. It has to be distinguished"
