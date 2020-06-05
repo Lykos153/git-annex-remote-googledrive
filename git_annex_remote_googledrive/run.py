@@ -20,8 +20,8 @@ from drivelib import __version__ as drivelib_version
 from drivelib import GoogleDrive
 from .google_remote import GoogleRemote
 from . import __version__
-from . import _default_client_id as client_id
-from . import _default_client_secret as client_secret
+from . import _default_client_id as DEFAULT_CLIENT_ID
+from . import _default_client_secret as DEFAULT_CLIENT_SECRET
 
 class bcolors:
     HEADER = '\033[95m'
@@ -71,6 +71,8 @@ def setup():
         print("Until this is settled you'll see a warning about this application not being verified by Google which you need to accept in order to proceed.")
         print("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
         print("======")
+        client_id = DEFAULT_CLIENT_ID
+        client_secret = DEFAULT_CLIENT_SECRET
 
 
     gauth = {
