@@ -63,8 +63,8 @@ def setup():
         use_own_api = False
 
     if use_own_api:
-        client_id = input("Client ID: ")
-        client_secret = input("Client Secret: ")
+        client_id = input("Client ID: ").strip()
+        client_secret = input("Client Secret: ").strip()
     else:
         print("======")
         print("IMPORTANT: Google has started to lockdown their Google Drive API. This might affect access to your remotes.")
