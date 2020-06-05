@@ -15,7 +15,7 @@ from pathlib import Path
 from . import __version__
 from annexremote import __version__ as annexremote_version
 from drivelib import __version__ as drivelib_version
-
+from . import _default_client_id as DEFAULT_CLIENT_ID
 
 
 from drivelib import GoogleDrive
@@ -249,7 +249,9 @@ class GoogleRemote(annexremote.ExportRemote):
     def prepare(self):
         self._send_version()
 
-        if self.annex.getconfig('mute-api-lockdown-warning') != "true":
+        if self.annex.getconfig('mute-api-lockdown-warning') != "true" and \
+                json.loads(self.credentials)['client_id'] == DEFAULT_CLIENT_ID:
+
             self._info("====== git-annex-remote-googledrive")
             self._info("IMPORTANT: Google has started to lockdown their Google Drive API. This might affect access to your Google Drive remotes.")
             self._info("Please consider untrusting this remote until it is clear what happends next.")

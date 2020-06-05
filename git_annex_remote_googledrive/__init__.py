@@ -10,3 +10,5 @@
 from ._version import get_versions
 __version__ = get_versions()['version']
 del get_versions
+_default_client_id = '275666578511-ndjt6mkns3vgb60cbo7csrjn6mbh8gbf.apps.googleusercontent.com'
+_default_client_secret = 'Den2tu08pRU4s5KeCp5whas_'
