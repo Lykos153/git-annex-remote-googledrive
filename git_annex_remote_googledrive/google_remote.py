@@ -125,7 +125,9 @@ class GoogleRemote(annexremote.ExportRemote):
                         "connectivity is interrupted and result in a finer progress feedback."
                         "Bigger values create slightly less overhead and are therefore"
                         "somewhat more efficient."
-                        "Default: {}".format(self.DEFAULT_CHUNKSIZE)
+                        "Default: {}".format(self.DEFAULT_CHUNKSIZE),
+            'mute-api-lockdown-warning':
+                        "Set to 'true' if you don't want to see the warning.",
         }
 
     def migrate(self, prefix):
