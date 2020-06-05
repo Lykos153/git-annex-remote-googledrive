@@ -85,14 +85,12 @@ def connect(exporttree=False):
             if not hasattr(self, 'root') or self.root is None:
                 prefix = self.annex.getconfig('prefix')
                 root_id = self.annex.getconfig('root_id')
-                credentials = self.annex.getcreds('credentials')['user']
 
-                root = self._get_root(root_class, credentials, prefix, root_id)
+                root = self._get_root(root_class, self.credentials, prefix, root_id)
                 if root.id != root_id:
                     raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
 
-                credentials = ''.join(root.json_creds().split())
-                self.annex.setcreds('credentials', credentials, '')
+                self.credentials = ''.join(root.json_creds().split())
                 
                 self.root = root
 
@@ -200,6 +198,18 @@ class GoogleRemote(annexremote.ExportRemote):
                 self._chunksize = humanfriendly.parse_size(self.DEFAULT_CHUNKSIZE)
         return self._chunksize
 
+    @property
+    def credentials(self):
+        if not hasattr(self, '_credentials'):
+            self._credentials = self.annex.getcreds('credentials')['user']
+        return self._credentials
+
+    @credentials.setter
+    def credentials(self, creds):
+        if not self.credentials or json.loads(creds) != json.loads(self.credentials):
+            self._credentials = creds
+            self.annex.setcreds('credentials', creds, '')
+
     @send_traceback
     def initremote(self):
         self._send_version()
@@ -220,8 +230,7 @@ class GoogleRemote(annexremote.ExportRemote):
             credentials = None
 
         if credentials is None:
-            credentials = self.annex.getcreds('credentials')['user']
-            if not credentials:
+            if not self.credentials:
                 raise RemoteError("No Credentials found. Run 'git-annex-remote-googledrive setup' in order to authenticate.")
 
 
@@ -235,8 +244,7 @@ class GoogleRemote(annexremote.ExportRemote):
         
 
         self.annex.setconfig('root_id', self.root.id)
-        credentials = ''.join(self.root.json_creds().split())
-        self.annex.setcreds('credentials', credentials, '')
+        self.credentials = ''.join(self.root.json_creds().split())
 
     def prepare(self):
         self._send_version()
