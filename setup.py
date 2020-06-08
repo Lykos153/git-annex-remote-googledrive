@@ -56,7 +56,7 @@ setup(
     },
     install_requires=[
           'annexremote',
-          'drivelib==0.1.4',
+          'drivelib>=0.1.4',
           'gitpython',
           'tenacity',
           'humanfriendly',
