@@ -117,14 +117,14 @@ class GoogleRemote(annexremote.ExportRemote):
                         " `prefix` by setting it to the empty string ('prefix=\"\"').",
             'transferchunk':
                         "Chunksize used for transfers. This is the minimum data which"
-                        "has to be retransmitted when resuming after a connection error."
-                        "This also affects the progress display. It has to be distinguished"
-                        "from `chunk`. A value between 1MiB and 10MiB is recommended."
-                        "Smaller values meaning less data to be re-transmitted when network"
-                        "connectivity is interrupted and result in a finer progress feedback."
-                        "Bigger values create slightly less overhead and are therefore"
-                        "somewhat more efficient."
-                        "Default: {}".format(self.DEFAULT_CHUNKSIZE),
+                        " has to be retransmitted when resuming after a connection error."
+                        " This also affects the progress display. It has to be distinguished"
+                        " from `chunk`. A value between 1MiB and 10MiB is recommended."
+                        " Smaller values meaning less data to be re-transmitted when network"
+                        " connectivity is interrupted and result in a finer progress feedback."
+                        " Bigger values create slightly less overhead and are therefore"
+                        " somewhat more efficient."
+                        " Default: {}".format(self.DEFAULT_CHUNKSIZE),
             'mute-api-lockdown-warning':
                         "Set to 'true' if you don't want to see the warning.",
             'token':    "Token file that was created by `git-annex-remote-googledrive setup`",
