@@ -35,24 +35,20 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-def _get_othertmp() -> os.PathLike:
+def _get_token_path() -> os.PathLike:
     git_repo = git.Repo(".", search_parent_directories=True)
     git_root = pathlib.Path(git_repo.git_dir)
     othertmp_dir = git_root / "annex/othertmp"
     othertmp_dir.mkdir(parents=True, exist_ok=True)
-    return othertmp_dir
+    return othertmp_dir / "git-annex-remote-googledrive.token"
 
 def _shutdown(signum, frame):
     print("Aborted by user")
     raise SystemExit
 
 
-def setup():
-    try:
-        token_file = _get_othertmp() / "git-annex-remote-googledrive.token"
-    except git.exc.InvalidGitRepositoryError:
-        print("ERROR: Needs to be run inside a git repository.")
-        return
+def setup(token_file):
+    token_file = pathlib.Path(token_file)
 
     print(  "You can enter your own API key or use the built-in one.\n"
             "The built-in API key is potentially slower as more people\n"
@@ -92,7 +88,15 @@ def setup():
 
     with token_file.open('w') as fp:
         fp.write(creds)
-    print("Setup complete. An auth token was stored in .git/annex/othertmp. Now run 'git annex initremote' with your desired parameters. If you don't run it from the same folder, specify via token=path/to/token.json")
+    print()
+    print("Setup complete. An auth token was stored in {}.".format(token_file),
+          "Now run 'git annex initremote' with your desired parameters.")
+    try:
+        if token_file == _get_token_path():
+            return
+    except git.exc.InvalidGitRepositoryError:
+        pass
+    print("Don't forget to specify token=<path/to/token.json>")
         
 
 def main():
@@ -111,10 +115,22 @@ def main():
 
         parser_setup = subparsers.add_parser('setup',
                                     help='Authenticate with Google to prepare for initremote/enableremote')
+        try:
+            default_token_file = _get_token_path()
+            help_string = "Default: {}".format(default_token_file)
+            help_string += " (Required when not run inside a git repository)"
+            token_required = False
+        except git.exc.InvalidGitRepositoryError:
+            default_token_file = None
+            help_string = "Required, because not running inside git repository."
+            token_required = True
+
+        parser_setup.add_argument('-o', '--output', type=str, default=default_token_file, required=token_required,
+                                        help='Where to store the auth token. {}'.format(help_string))
 
         args = parser.parse_args()
         if args.subcommand == 'setup':
-            setup()
+            setup(args.output)
             return
         elif args.subcommand == 'version':
             print(os.path.basename(__file__), __version__)
