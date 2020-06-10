@@ -232,12 +232,19 @@ class GoogleRemote(annexremote.ExportRemote):
         try:
             with token_file.open('r') as fp:
                 credentials = fp.read()
-        except:
+        except Exception as e:
+            if token_config:
+                raise RemoteError("Could not read token file {}:".format(token_file), e)
+            self.annex.debug("Error reading token file at {}".format(token_file),
+                             e,
+                             " Trying embedded credentials")
             credentials = None
 
-        if credentials is None:
-            if not self.credentials:
-                raise RemoteError("No Credentials found. Run 'git-annex-remote-googledrive setup' in order to authenticate.")
+        if not credentials:
+            credentials = self.credentials
+
+        if not credentials:
+            raise RemoteError("No Credentials found. Run 'git-annex-remote-googledrive setup' in order to authenticate.")
 
 
         if self.annex.getconfig('exporttree') == 'yes':
