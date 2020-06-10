@@ -13,6 +13,8 @@ import distutils.util
 
 import git
 import signal
+import argparse
+
 
 from annexremote import Master
 from annexremote import __version__ as annexremote_version
@@ -97,24 +99,34 @@ def main():
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
     if len(sys.argv) > 1:
-        if sys.argv[1] == 'setup':
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers(dest='subcommand')
+
+        parser_migrate = subparsers.add_parser('version',
+                                    help='Show version of {} and relevant libraries'.format(__name__))
+        parser_migrate = subparsers.add_parser('migrate',
+                                    help='Migrate a folder to nodir structure')
+        parser_migrate.add_argument('prefix', type=str,
+                                        help='Path to folder which should be migrated')
+
+        parser_setup = subparsers.add_parser('setup',
+                                    help='Authenticate with Google to prepare for initremote/enableremote')
+
+        args = parser.parse_args()
+        if args.subcommand == 'setup':
             setup()
             return
-        elif sys.argv[1] == 'version':
+        elif args.subcommand == 'version':
             print(os.path.basename(__file__), __version__)
             print("Using AnnexRemote", annexremote_version)
             print("Using drivelib", drivelib_version)
             return
-        elif sys.argv[1] == 'migrate':
+        elif args.subcommand == 'migrate':
             with open(os.devnull, 'w') as devnull:
                 master = Master(devnull)
                 remote = GoogleRemote(master)
-                if len(sys.argv) != 3:
-                    print ("Usage: git-annex-remote-googledrive migrate <prefix>")
-                    return
-
                 try:
-                    migration_count = remote.migrate(sys.argv[2])
+                    migration_count = remote.migrate(args.prefix)
                 except (KeyboardInterrupt, SystemExit):
                     print ("\n{}Exiting.".format(bcolors.WARNING))
                     print ("The remote is in an undefined state now. Re-run this script before using git-annex on it.")
