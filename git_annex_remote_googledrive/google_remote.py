@@ -13,6 +13,7 @@ from pathlib import Path
 
 
 from . import __version__
+from . import __name__ as MODULENAME
 from annexremote import __version__ as annexremote_version
 from drivelib import __version__ as drivelib_version
 from . import _default_client_id as DEFAULT_CLIENT_ID
@@ -380,7 +381,7 @@ class GoogleRemote(annexremote.ExportRemote):
         global annexremote_version
         global drivelib_version
         self.annex.debug("Running {} version {}".format(
-                            os.path.basename(__file__),
+                            MODULENAME,
                             __version__
                         ))
         self.annex.debug("Using AnnexRemote version", annexremote_version)

@@ -23,6 +23,7 @@ from drivelib import __version__ as drivelib_version
 from drivelib import GoogleDrive
 from .google_remote import GoogleRemote
 from . import __version__
+from . import __name__ as MODULENAME
 from . import _default_client_id as DEFAULT_CLIENT_ID
 from . import _default_client_secret as DEFAULT_CLIENT_SECRET
 
@@ -142,7 +143,7 @@ def main():
             setup(args.output, gauth_file=args.client_secret)
             return
         elif args.subcommand == 'version':
-            print(os.path.basename(__file__), __version__)
+            print(MODULENAME, __version__)
             print("Using AnnexRemote", annexremote_version)
             print("Using drivelib", drivelib_version)
             return
