@@ -14,6 +14,7 @@ import distutils.util
 import git
 import signal
 import argparse
+import json
 
 
 from annexremote import Master
@@ -47,43 +48,48 @@ def _shutdown(signum, frame):
     raise SystemExit
 
 
-def setup(token_file):
+def setup(token_file, gauth_file=None):
     token_file = pathlib.Path(token_file)
-
-    print(  "You can enter your own API key or use the built-in one.\n"
-            "The built-in API key is potentially slower as more people\n"
-            "are using it. Also, it might be blocked due to it not (yet)\n"
-            "being verified by Google. ")
-
-    try:
-        use_own_api = distutils.util.strtobool(input("Do you want to use your own API key? (y/N)").lower())
-    except ValueError:
-        use_own_api = False
-
-    if use_own_api:
-        client_id = input("Client ID: ").strip()
-        client_secret = input("Client Secret: ").strip()
+    if gauth_file is not None:
+        gauth_file = pathlib.Path(gauth_file)
+        with gauth_file.open('r') as fp:
+            gauth = json.load(fp)
     else:
-        print("======")
-        print("IMPORTANT: Google has started to lockdown their Google Drive API. This might affect access to your remotes.")
-        print("Until this is settled you'll see a warning about this application not being verified by Google which you need to accept in order to proceed.")
-        print("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
-        print("======")
-        client_id = DEFAULT_CLIENT_ID
-        client_secret = DEFAULT_CLIENT_SECRET
+        print(  "You can enter your own API key or use the built-in one.\n"
+                "The built-in API key is potentially slower as more people\n"
+                "are using it. Also, it might be blocked due to it not (yet)\n"
+                "being verified by Google. ")
+
+        try:
+            use_own_api = distutils.util.strtobool(input("Do you want to use your own API key? (y/N)").lower())
+        except ValueError:
+            use_own_api = False
+
+        if use_own_api:
+            client_id = input("Client ID: ").strip()
+            client_secret = input("Client Secret: ").strip()
+        else:
+            print("======")
+            print("IMPORTANT: Google has started to lockdown their Google Drive API. This might affect access to your remotes.")
+            print("Until this is settled you'll see a warning about this application not being verified by Google which you need to accept in order to proceed.")
+            print("Read more on https://github.com/Lykos153/git-annex-remote-googledrive#google-drive-api-lockdown")
+            print("======")
+            client_id = DEFAULT_CLIENT_ID
+            client_secret = DEFAULT_CLIENT_SECRET
 
 
-    gauth = {
-                'installed':
-                {
-                    'client_id': client_id,
-                    'client_secret': client_secret,
-                    'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
-                    'token_uri': 'https://accounts.google.com/o/oauth2/token',
-                    'revoke_uri': None,
-                    'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob',
+        gauth = {
+                    'installed':
+                    {
+                        'client_id': client_id,
+                        'client_secret': client_secret,
+                        'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
+                        'token_uri': 'https://accounts.google.com/o/oauth2/token',
+                        'revoke_uri': None,
+                        'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob',
+                    }
                 }
-            }
+                
     creds = GoogleDrive.auth(gauth)
 
     with token_file.open('w') as fp:
@@ -115,6 +121,9 @@ def main():
 
         parser_setup = subparsers.add_parser('setup',
                                     help='Authenticate with Google to prepare for initremote/enableremote')
+        parser_setup.add_argument('--client-secret', type=str,
+                                        help='Provide your own client secret in JSON format'
+                                             ' (as downloaded from https://console.developers.google.com )')
         try:
             default_token_file = _get_token_path()
             help_string = "Default: {}".format(default_token_file)
@@ -130,7 +139,7 @@ def main():
 
         args = parser.parse_args()
         if args.subcommand == 'setup':
-            setup(args.output)
+            setup(args.output, gauth_file=args.client_secret)
             return
         elif args.subcommand == 'version':
             print(os.path.basename(__file__), __version__)
