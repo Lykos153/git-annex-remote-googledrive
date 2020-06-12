@@ -12,6 +12,7 @@ from __future__ import annotations #only > 3.7, better to find a different solut
 from pathlib import Path
 from pathlib import PurePath
 from os import PathLike
+from abc import abstractmethod
 
 from drivelib import GoogleDrive
 from drivelib import DriveFile
@@ -59,6 +60,10 @@ class RemoteRootBase:
     def json_creds(self) -> str:
         return self.folder.drive.json_creds()
 
+    @abstractmethod
+    def get_key_by_url(self, url: str) -> Key:
+        pass
+
 class RemoteRoot(RemoteRootBase):
     def __init__(self, rootfolder, uuid: str=None, local_appdir: Union(str, PathLike)=None):
         super().__init__(rootfolder, uuid=uuid, local_appdir=local_appdir)
@@ -80,6 +85,11 @@ class RemoteRoot(RemoteRootBase):
             
         if remote_file.isfolder():
             raise NotAFileError(key)
+        return Key(self, key, remote_file)
+
+    def get_key_by_url(self, key: str, url: str) -> Key:
+        file_id = GoogleDrive.url_to_id(url)
+        remote_file = self.folder.drive.item_by_id(file_id)
         return Key(self, key, remote_file)
 
     def new_key(self, key: str) -> Key:
@@ -167,6 +177,10 @@ class Key():
                 with uri_file.open('w') as fh:
                     fh.write(self._resumable_uri)
                 logging.info("Stored resumable_uri in %s", str(uri_file))
+
+    @property
+    def download_url(self):
+        return self.file.meta_get("webContentLink")["webContentLink"]
 
     def _upload_progress(self, progress_handler: callable = None):
         def fun(progress: ResumableMediaUploadProgress):
