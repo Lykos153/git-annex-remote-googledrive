@@ -39,12 +39,13 @@ Options specific to git-annex-remote-googledrive
 * `transferchunk` - Chunksize used for transfers. This is the minimum data which has to be retransmitted when resuming after a connection error. This also affects the progress display. It has to be distinguished from `chunk`. A value between 1MiB and 10MiB is recommended. Smaller values meaning less data to be re-transmitted when network connectivity is interrupted and result in a finer progress feedback. Bigger values create slightly less overhead and are therefore somewhat more efficient. Default: 5MiB
 
 General git-annex options
-* `encryption` - One of "none", "hybrid", "shared", or "pubkey". See [encryption](https://git-annex.branchable.com/encryption/).
+* `encryption` - One of "none", "hybrid", "shared", "pubkey" or "sharedpubkey". See [encryption](https://git-annex.branchable.com/encryption/).
 * `keyid` - Specifies the gpg key to use for encryption.
 * `mac` - The MAC algorithm. See [encryption](https://git-annex.branchable.com/encryption/).
 * `exporttree` - Set to `yes` to make this special remote usable by git-annex-export. It will not be usable as a general-purpose special remote.
 * `chunk` - This is the size in which git-annex splits the keys prior to uploading, see [chunking](https://git-annex.branchable.com/chunking). As Google Drive allows file sizes up to 5TB and as this remote implements chunked transfers, this option is actually only useful in two situations: (1) Encryption. If you're using encryption, this is the amount of disk space that will additionally be used during upload. (2) Streaming. If you want to access a file while it's still being downloaded using [git-annex-inprogress](https://git-annex.branchable.com/git-annex-inprogress/)
-If you don't use either of those on this remote, you can just ignore this option. If you use it, a value between 50MiB and 500MiB is probably a good idea. Smaller values mean more API calls for presence check of big files which can dramatically slow down `fsck`, `drop` or `move`. Bigger values mean more waiting time before being able to access the downloaded file via `git annex inprogress`.
+If you don't use either of those on this remote, you can just ignore this option. If you use it, a value between `50MiB` and `500MiB` is probably a good idea. Smaller values mean more API calls for presence check of big files which can dramatically slow down `fsck`, `drop` or `move`. Bigger values mean more waiting time before being able to access the downloaded file via `git annex inprogress`.
+* `embedcreds` - Set to `yes` to force the credentials to be stored within the git-annex branch of the repository, encrypted with the same method as the keys (`none`, `hybrid`, `shared`, `pubkey`, `sharedpubkey`). If this option is not set to `yes`, the behaviour depends on the encryption. In case of hybrid, pubkey or sharedpubkey, the credentials are embedded in the repository as if embedcreds were set. For all other encryption methods (none and shared) the credentials are stored in a file within the .git directory unencrypted.
 
 ## Using an existing remote (note on repository layout)
 
