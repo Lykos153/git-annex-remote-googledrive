@@ -221,6 +221,7 @@ class GoogleRemote(annexremote.ExportRemote):
             raise RemoteError("Either prefix or root_id must be given.")
 
         token_config = self.annex.getconfig('token')
+        self.annex.setconfig('token', "")
         if token_config:
             token_file = Path(token_config)
         else:
@@ -255,7 +256,6 @@ class GoogleRemote(annexremote.ExportRemote):
             except HasSubdirError:
                 raise RemoteError("Specified folder has subdirectories. Are you sure 'prefix' or 'id' is set correctly? In case you're migrating from gdrive or rclone, run 'git-annex-remote-googledrive migrate {prefix}' first.".format(prefix=prefix))
         
-        self.annex.setconfig('token', "")
         self.annex.setconfig('root_id', self.root.id)
         self.credentials = ''.join(self.root.json_creds().split())
 
