@@ -76,12 +76,13 @@ class RemoteRoot(RemoteRootBase):
     def key(self, key: str) -> Key:
         try:
             remote_file = self.folder.child(key)
-        except AmbiguousPathError:
-            files = self.folder.children(name=key)
-            remote_file = next(files)
-            for current_file in files:
-                if current_file.md5sum == remote_file.md5sum:
-                    current_file.remove()
+        except AmbiguousPathError as e:
+            if not hasattr(e, "duplicates"):
+                raise
+            remote_file = next(e.duplicates)
+            for dup in e.duplicates:
+                if dup.md5sum == remote_file.md5sum:
+                    dup.remove()
                 else:
                     raise
         except FileNotFoundError:
