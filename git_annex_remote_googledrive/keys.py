@@ -67,6 +67,13 @@ class RemoteRoot(RemoteRootBase):
         self._delete_test_keys()
 
     def get_key(self, key: str) -> Key:
+        k = self.key(key)
+        if k.file.id:
+            return k
+        else:
+            raise FileNotFoundError
+
+    def key(self, key: str) -> Key:
         try:
             remote_file = self.folder.child(key)
         except AmbiguousPathError:
@@ -77,23 +84,13 @@ class RemoteRoot(RemoteRootBase):
                     current_file.remove()
                 else:
                     raise
+        except FileNotFoundError:
+            # Uploading an existing key is not an error
+            remote_file = self.folder.new_file(key)
             
         if remote_file.isfolder():
             raise NotAFileError(key)
         return Key(self, key, remote_file)
-
-    def new_key(self, key: str) -> Key:
-        try:
-            self.get_key(key)
-        except FileNotFoundError:
-            pass
-        except HttpError as e:
-            if e.resp.status != 308:
-                raise
-        else:
-            raise FileExistsError(key)
-
-        return Key(self, key, self.folder.new_file(key))
 
     def delete_key(self, key: str):
         try:
@@ -132,6 +129,9 @@ class Key():
                 logging.warning("Invalid resumable_uri. Probably expired. Repeating upload.")
             else:
                 raise
+        except FileExistsError:
+            # Uploading an existing key is not an error
+            return
 
             self.resumable_uri = None
             self.file.upload(local_filename,
