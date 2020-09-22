@@ -235,30 +235,3 @@ class ExportKey(Key):
     def __init__(self, root: ExportRemoteRoot, key: str, path: Union(str, PathLike), remote_file: DriveFile):
         super().__init__(root, key, remote_file)
         self.path = PurePath(path)
-
-class MigrationRoot(RemoteRootBase):
-    def __init__(self, rootfolder):
-        super().__init__(rootfolder)
-        self.migration_count = {'moved':0, 'deleted':0}
-
-    def migrate(self):
-        self._migration_traverse(self.folder, "")
-        return self.migration_count
-    
-    #@retry(wait=wait_fixed(2), retry=retry_conditions['retry'])   
-    def _migration_traverse(self, current_folder, current_path) -> Dict[str, int]:
-        #TODO: Use batch requests
-        if current_folder == self.folder:
-            for subfolder in current_folder.children(files=False):
-                self._migration_traverse(subfolder, current_path+"/"+subfolder.name)
-        else:
-            for file_ in current_folder.children():
-                if isinstance(file_, DriveFolder):
-                    self._migration_traverse(file_, current_path+"/"+file_.name)
-                else:
-                    print ( "Moving {}/{}".format(current_path,file_.name) )
-                    file_.move(self.folder)
-                    self.migration_count['moved'] += 1
-            print ("Deleting folder {}".format(current_path))
-            current_folder.remove()
-            self.migration_count['deleted'] += 1
