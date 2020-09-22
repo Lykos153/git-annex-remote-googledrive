@@ -72,31 +72,6 @@ def send_version_on_error(f):
 
     return send_version_wrapper
 
-def connect(exporttree=False):
-    if exporttree:
-        root_class = ExportRemoteRoot
-    else:
-        root_class = RemoteRoot
-    def decorator(f):
-        @wraps(f)
-        def wrapper(self, *args, **kwargs):
-            if not hasattr(self, 'root') or self.root is None:
-                prefix = self.annex.getconfig('prefix')
-                root_id = self.annex.getconfig('root_id')
-
-                root = self._get_root(root_class, self.credentials, prefix, root_id)
-                if root.id != root_id:
-                    raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
-
-                self.credentials = ''.join(root.json_creds().split())
-                
-                self.root = root
-
-            return f(self, *args, **kwargs)
-        return wrapper
-    return decorator
-    
-
 class GoogleRemote(annexremote.ExportRemote):
 
     def __init__(self, annex):
@@ -127,24 +102,43 @@ class GoogleRemote(annexremote.ExportRemote):
             'token':    "Token file that was created by `git-annex-remote-googledrive setup`",
         }
 
-    def _get_root(self, RootClass, creds, prefix=None, root_id=None):
-        #TODO: Maybe implement as property, too
-        try:
-            if prefix:
-                return RootClass.from_path(creds, prefix, uuid=self.uuid, local_appdir=self.local_appdir)
+    @property
+    def root(self):
+        if not hasattr(self, '_root') or self._root is None:
+            prefix = self.annex.getconfig('prefix')
+            root_id = self.annex.getconfig('root_id')
+            exporttree = self.annex.getconfig('exporttree')
+            if exporttree:
+                root_class = ExportRemoteRoot
             else:
-                return RootClass.from_id(creds, root_id, uuid=self.uuid, local_appdir=self.local_appdir)
-        except JSONDecodeError:
-            raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
-        except (NotAuthenticatedError, RefreshError):
-            raise RemoteError("Failed to authenticate with Google. Please run 'git-annex-remote-googledrive setup'.")
-        except FileNotFoundError:
-            if prefix:
-                raise RemoteError("Prefix {} does not exist or does not point to a folder.".format(prefix))
-            else:
-                raise RemoteError("File ID {} does not exist or does not point to a folder.".format(root_id))
-        except Exception as e:
-            raise RemoteError("Failed to connect with Google. Please check your internet connection.", e)
+                root_class = RemoteRoot
+
+            try:
+                if prefix:
+                    root = root_class.from_path(self.credentials, prefix, uuid=self.uuid, local_appdir=self.local_appdir)
+                else:
+                    root = root_class.from_id(self.credentials, root_id, uuid=self.uuid, local_appdir=self.local_appdir)
+            except JSONDecodeError:
+                raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
+            except (NotAuthenticatedError, RefreshError):
+                raise RemoteError("Failed to authenticate with Google. Please run 'git-annex-remote-googledrive setup'.")
+            except FileNotFoundError:
+                if prefix:
+                    raise RemoteError("Prefix {} does not exist or does not point to a folder.".format(prefix))
+                else:
+                    raise RemoteError("File ID {} does not exist or does not point to a folder.".format(root_id))
+            except Exception as e:
+                raise RemoteError("Failed to connect with Google. Please check your internet connection.", e)
+            except HasSubdirError:
+                raise RemoteError("Specified folder has subdirectories. Are you sure 'prefix' or 'id' is set correctly? As of now, git-annex-remote-googledrive only supports the 'nodir' layout.")
+
+            if root.id != root_id and not (hasattr(self, 'isinitremote') and self.isinitremote is True):
+                raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
+
+            self.credentials = ''.join(root.json_creds().split())
+            
+            self._root = root
+        return self._root
 
     @property
     def encryption(self):
@@ -205,6 +199,7 @@ class GoogleRemote(annexremote.ExportRemote):
 
     @send_version_on_error
     def initremote(self):
+        self.isinitremote = True
         self._send_version()
         prefix = self.annex.getconfig('prefix')
         root_id = self.annex.getconfig('root_id')
@@ -223,32 +218,18 @@ class GoogleRemote(annexremote.ExportRemote):
 
         try:
             with token_file.open('r') as fp:
-                credentials = ''.join(fp.read().split())
+                self.credentials = ''.join(fp.read().split())
         except Exception as e:
             if token_config:
                 raise RemoteError("Could not read token file {}:".format(token_file), e)
             self.annex.debug("Error reading token file at {}".format(token_file),
                              e,
                              " Trying embedded credentials")
-            credentials = None
+            if not self.credentials:
+                raise RemoteError("No Credentials found. Run 'git-annex-remote-googledrive setup' in order to authenticate.")
 
-        if not credentials:
-            credentials = self.credentials
-
-        if not credentials:
-            raise RemoteError("No Credentials found. Run 'git-annex-remote-googledrive setup' in order to authenticate.")
-
-
-        if self.annex.getconfig('exporttree') == 'yes':
-            self.root = self._get_root(ExportRemoteRoot, credentials, prefix, root_id)
-        else:
-            try:
-                self.root = self._get_root(RemoteRoot, credentials, prefix, root_id)
-            except HasSubdirError:
-                raise RemoteError("Specified folder has subdirectories. Are you sure 'prefix' or 'id' is set correctly? As of now, git-annex-remote-googledrive only supports the 'nodir' layout.")
-        
         self.annex.setconfig('root_id', self.root.id)
-        self.credentials = ''.join(self.root.json_creds().split())
+        self.isinitremote = False
 
     def prepare(self):
         self._send_version()
@@ -265,7 +246,6 @@ class GoogleRemote(annexremote.ExportRemote):
 
     @send_version_on_error
     @retry(**retry_conditions)
-    @connect()
     def transfer_store(self, key, fpath):
         fpath = Path(fpath)
         new_path = self.local_appdir / self.uuid / "tmp" / key
@@ -288,7 +268,6 @@ class GoogleRemote(annexremote.ExportRemote):
 
     @send_version_on_error
     @retry(**retry_conditions)
-    @connect()
     def transfer_retrieve(self, key, fpath):
         self.root.get_key(key).download(
                     fpath, 
@@ -297,7 +276,6 @@ class GoogleRemote(annexremote.ExportRemote):
     
     @send_version_on_error
     @retry(**retry_conditions)
-    @connect()
     def checkpresent(self, key):
         try:
             self.root.get_key(key)
@@ -307,13 +285,11 @@ class GoogleRemote(annexremote.ExportRemote):
 
     @send_version_on_error
     @retry(**retry_conditions)
-    @connect()
     def remove(self, key):
         self.root.delete_key(key)
 
     @send_version_on_error
     @retry(**retry_conditions)
-    @connect(exporttree=True)
     def transferexport_store(self, key, fpath, name):
         #TODO: if file already exists, compare md5sum
         self.root.new_key(key, name).upload(
@@ -324,7 +300,6 @@ class GoogleRemote(annexremote.ExportRemote):
 
     @send_version_on_error
     @retry(**retry_conditions)
-    @connect(exporttree=True)
     def transferexport_retrieve(self, key, fpath, name):
         self.root.get_key(key, name).download(
             fpath,
@@ -334,7 +309,6 @@ class GoogleRemote(annexremote.ExportRemote):
 
     @send_version_on_error
     @retry(**retry_conditions)
-    @connect(exporttree=True)
     def checkpresentexport(self, key, name):
         try:
             self.root.get_key(key, name)
@@ -344,13 +318,11 @@ class GoogleRemote(annexremote.ExportRemote):
 
     @send_version_on_error
     @retry(**retry_conditions)
-    @connect(exporttree=True)
     def removeexport(self, key, name):
         self.root.delete_key(key, name)
 
     @send_version_on_error
     @retry(**retry_conditions)
-    @connect(exporttree=True)
     def removeexportdirectory(self, directory):
         try:
             self.root.delete_dir(directory)
@@ -359,7 +331,6 @@ class GoogleRemote(annexremote.ExportRemote):
 
     @send_version_on_error
     @retry(**retry_conditions)
-    @connect(exporttree=True)
     def renameexport(self, key, name, new_name):
         self.root.rename_key(key, name, new_name)
             
