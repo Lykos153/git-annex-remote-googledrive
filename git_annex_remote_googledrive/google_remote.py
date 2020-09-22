@@ -24,7 +24,6 @@ from drivelib import Credentials
 
 from .keys import RemoteRoot, Key
 from .keys import ExportRemoteRoot, ExportKey
-from .keys import MigrationRoot
 from .keys import HasSubdirError, NotAFileError, NotAuthenticatedError
 
 
@@ -130,13 +129,6 @@ class GoogleRemote(annexremote.ExportRemote):
                         "Set to 'true' if you don't want to see the warning.",
             'token':    "Token file that was created by `git-annex-remote-googledrive setup`",
         }
-
-    def migrate(self, prefix):
-        with open("token.json", 'r') as fp:
-            creds = fp.read()
-
-        root = self._get_root(MigrationRoot, creds, prefix)
-        return root.migrate()
 
     def _get_root(self, RootClass, creds, prefix=None, root_id=None):
         #TODO: Maybe implement as property, too
@@ -260,7 +252,7 @@ class GoogleRemote(annexremote.ExportRemote):
             try:
                 self.root = self._get_root(RemoteRoot, credentials, prefix, root_id)
             except HasSubdirError:
-                raise RemoteError("Specified folder has subdirectories. Are you sure 'prefix' or 'id' is set correctly? In case you're migrating from gdrive or rclone, run 'git-annex-remote-googledrive migrate {prefix}' first.".format(prefix=prefix))
+                raise RemoteError("Specified folder has subdirectories. Are you sure 'prefix' or 'id' is set correctly? As of now, git-annex-remote-googledrive only supports the 'nodir' layout.")
         
         self.annex.setconfig('root_id', self.root.id)
         self.credentials = self.root.creds()
