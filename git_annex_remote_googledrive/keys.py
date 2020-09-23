@@ -64,7 +64,6 @@ class RemoteRoot(RemoteRootBase):
         super().__init__(rootfolder, uuid=uuid, local_appdir=local_appdir)
         if next(self.folder.children(files=False), None):
             raise HasSubdirError()
-        self._delete_test_keys()
 
     def get_key(self, key: str) -> Key:
         k = self.key(key)
@@ -99,11 +98,6 @@ class RemoteRoot(RemoteRootBase):
         except FileNotFoundError:
             pass
 
-    def _delete_test_keys(self):
-        query = "'{root_id}' in parents and \
-                    name contains 'this-is-a-test-key'".format(
-                    root_id=self.folder.id
-                    )
 
         for test_key in self.folder.drive.items_by_query(query):
             test_key.remove()
