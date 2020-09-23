@@ -221,8 +221,8 @@ class GoogleRemote(annexremote.ExportRemote):
             raise RemoteError("Either prefix or root_id must be given.")
 
         token_config = self.annex.getconfig('token')
-        self.annex.setconfig('token', "")
         if token_config:
+            self.annex.setconfig('token', "")
             token_file = Path(token_config)
         else:
             git_root = Path(self.annex.getgitdir())
