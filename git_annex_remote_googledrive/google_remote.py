@@ -21,7 +21,7 @@ from . import _default_client_id as DEFAULT_CLIENT_ID
 
 from drivelib import GoogleDrive
 
-from .keys import RemoteRoot, Key
+from .keys import Key, NodirRemoteRoot
 from .keys import ExportRemoteRoot, ExportKey
 from .keys import HasSubdirError, NotAFileError, NotAuthenticatedError
 
@@ -111,7 +111,7 @@ class GoogleRemote(annexremote.ExportRemote):
             if exporttree:
                 root_class = ExportRemoteRoot
             else:
-                root_class = RemoteRoot
+                root_class = NodirRemoteRoot
 
             try:
                 if prefix:
@@ -127,8 +127,6 @@ class GoogleRemote(annexremote.ExportRemote):
                     raise RemoteError("Prefix {} does not exist or does not point to a folder.".format(prefix))
                 else:
                     raise RemoteError("File ID {} does not exist or does not point to a folder.".format(root_id))
-            except Exception as e:
-                raise RemoteError("Failed to connect with Google. Please check your internet connection.", e)
             except HasSubdirError:
                 raise RemoteError("Specified folder has subdirectories. Are you sure 'prefix' or 'id' is set correctly? As of now, git-annex-remote-googledrive only supports the 'nodir' layout.")
 

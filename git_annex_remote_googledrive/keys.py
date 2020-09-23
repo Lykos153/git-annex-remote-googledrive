@@ -12,6 +12,7 @@ from __future__ import annotations #only > 3.7, better to find a different solut
 from pathlib import Path
 from pathlib import PurePath
 from os import PathLike
+import abc
 
 from drivelib import GoogleDrive
 from drivelib import DriveFile
@@ -30,7 +31,7 @@ class NotAFileError(Exception):
 class HasSubdirError(Exception):
     pass
 
-class RemoteRootBase:
+class RemoteRootBase(abc.ABC):
     def __init__(self, rootfolder: DriveFolder, uuid: str=None, local_appdir: Union(str, PathLike)=None):
         self.folder = rootfolder
         self.uuid = uuid
@@ -62,8 +63,6 @@ class RemoteRootBase:
 class RemoteRoot(RemoteRootBase):
     def __init__(self, rootfolder, uuid: str=None, local_appdir: Union(str, PathLike)=None):
         super().__init__(rootfolder, uuid=uuid, local_appdir=local_appdir)
-        if next(self.folder.children(files=False), None):
-            raise HasSubdirError()
 
     def get_key(self, key: str) -> Key:
         k = self.key(key)
@@ -74,7 +73,7 @@ class RemoteRoot(RemoteRootBase):
 
     def key(self, key: str) -> Key:
         try:
-            remote_file = self.folder.child(key)
+            remote_file = self._lookup_remote_file(key)
         except AmbiguousPathError as e:
             if not hasattr(e, "duplicates"):
                 raise
@@ -86,7 +85,7 @@ class RemoteRoot(RemoteRootBase):
                     raise
         except FileNotFoundError:
             # Uploading an existing key is not an error
-            remote_file = self.folder.new_file(key)
+            remote_file = self._new_remote_file(key)
             
         if remote_file.isfolder():
             raise NotAFileError(key)
@@ -97,10 +96,27 @@ class RemoteRoot(RemoteRootBase):
             self.get_key(key).file.remove()
         except FileNotFoundError:
             pass
+    
+    @abc.abstractmethod
+    def _lookup_remote_file(self, key: str):
+        raise NotImplementedError
 
+    @abc.abstractmethod
+    def _new_remote_file(self, key: str):
+        raise NotImplementedError
 
-        for test_key in self.folder.drive.items_by_query(query):
-            test_key.remove()
+class NodirRemoteRoot(RemoteRoot):
+    def __init__(self, rootfolder, uuid: str=None, local_appdir: Union(str, PathLike)=None):
+        super().__init__(rootfolder, uuid=uuid, local_appdir=local_appdir)
+        if next(self.folder.children(files=False), None):
+            raise HasSubdirError()
+
+    def _lookup_remote_file(self, key):
+        return self.folder.child(key)
+
+    def _new_remote_file(self, key):
+        return self.folder.new_file(key)
+
 
 class Key():
     def __init__(self, root: RemoteRootBase, key: str, remote_file: DriveFile):
