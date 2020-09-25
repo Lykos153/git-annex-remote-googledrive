@@ -119,9 +119,9 @@ class GoogleRemote(annexremote.ExportRemote):
 
             try:
                 if prefix:
-                    root = root_class.from_path(self.credentials, prefix, uuid=self.uuid, local_appdir=self.local_appdir)
+                    root = root_class.from_path(self.credentials, prefix, annex=self.annex, uuid=self.uuid, local_appdir=self.local_appdir)
                 else:
-                    root = root_class.from_id(self.credentials, root_id, uuid=self.uuid, local_appdir=self.local_appdir)
+                    root = root_class.from_id(self.credentials, root_id, annex=self.annex, uuid=self.uuid, local_appdir=self.local_appdir)
             except JSONDecodeError:
                 raise RemoteError("Access token invalid, please re-run `git-annex-remote-googledrive setup`")
             except (NotAuthenticatedError, RefreshError):
