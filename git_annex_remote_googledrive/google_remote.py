@@ -21,7 +21,7 @@ from . import _default_client_id as DEFAULT_CLIENT_ID
 
 from drivelib import GoogleDrive
 
-from .keys import Key, NodirRemoteRoot
+from .keys import Key, NodirRemoteRoot, NestedRemoteRoot
 from .keys import ExportRemoteRoot, ExportKey
 from .keys import HasSubdirError, NotAFileError, NotAuthenticatedError
 
@@ -111,7 +111,7 @@ class GoogleRemote(annexremote.ExportRemote):
             if exporttree:
                 root_class = ExportRemoteRoot
             else:
-                root_class = NodirRemoteRoot
+                root_class = NestedRemoteRoot
 
             try:
                 if prefix:

@@ -159,6 +159,36 @@ class NodirRemoteRoot(RemoteRoot):
     def _new_remote_file(self, key):
         return self.folder.new_file(key)
 
+class NestedRemoteRoot(RemoteRoot):
+    def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
+        super().__init__(rootfolder, annex, uuid=uuid, local_appdir=local_appdir)
+        self.subfolders = self._get_subfolders()
+        if len(self.subfolders) == 0:
+            #TODO Check for full folder
+            self.subfolders.append(self.folder.mkdir(format(0, "05x")))
+
+    def _get_subfolders(self):
+        f = []
+        while(True):
+            try:
+                f.append(self.folder.child(format(len(f), "05x")))
+            except FileNotFoundError:
+                break
+        return f
+
+    def _lookup_remote_file(self, key):
+        remote_file = self._find_elsewhere(key)
+        if remote_file.parent not in self.subfolders:
+            #TODO support nested folders
+            remote_file.move(self.subfolders[-1])
+        return remote_file
+
+
+    def _new_remote_file(self, key):
+        #TODO: Check for full folder
+        return self.subfolders[-1].new_file(key)
+
+
 
 class Key():
     def __init__(self, root: RemoteRootBase, key: str, remote_file: DriveFile):
