@@ -22,7 +22,7 @@ from . import _default_client_id as DEFAULT_CLIENT_ID
 from drivelib import GoogleDrive
 from drivelib import Credentials
 
-from .keys import Key, NodirRemoteRoot
+from .keys import Key, NodirRemoteRoot, NestedRemoteRoot
 from .keys import ExportRemoteRoot, ExportKey
 from .keys import HasSubdirError, NotAFileError, NotAuthenticatedError
 
@@ -112,7 +112,7 @@ class GoogleRemote(annexremote.ExportRemote):
             if exporttree:
                 root_class = ExportRemoteRoot
             else:
-                root_class = NodirRemoteRoot
+                root_class = NestedRemoteRoot
 
             if self.credentials is None:
                 raise RemoteError("Stored credentials are invalid. Please re-run `git-annex-remote-googledrive setup` and `git annex enableremote <remotename>`")
