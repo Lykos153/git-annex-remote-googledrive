@@ -258,7 +258,7 @@ class GoogleRemote(annexremote.ExportRemote):
         else:
             upload_path = fpath
 
-        self.root.key(key).upload(
+        self.root.new_key(key).upload(
                         str(upload_path), 
                         chunksize=self.chunksize,
                         progress_handler=self.annex.progress)

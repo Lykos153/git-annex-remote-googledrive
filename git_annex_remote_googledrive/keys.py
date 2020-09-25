@@ -65,13 +65,6 @@ class RemoteRoot(RemoteRootBase):
         super().__init__(rootfolder, uuid=uuid, local_appdir=local_appdir)
 
     def get_key(self, key: str) -> Key:
-        k = self.key(key)
-        if k.file.id:
-            return k
-        else:
-            raise FileNotFoundError
-
-    def key(self, key: str) -> Key:
         try:
             remote_file = self._lookup_remote_file(key)
         except AmbiguousPathError as e:
@@ -83,12 +76,16 @@ class RemoteRoot(RemoteRootBase):
                     dup.remove()
                 else:
                     raise
-        except FileNotFoundError:
-            # Uploading an existing key is not an error
-            remote_file = self._new_remote_file(key)
-            
+
         if remote_file.isfolder():
             raise NotAFileError(key)
+        return Key(self, key, remote_file)
+
+    def new_key(self, key: str) -> Key:
+        try:
+            remote_file = self._new_remote_file(key)
+        except FileExistsError:
+            return self.get_key(key)
         return Key(self, key, remote_file)
 
     def delete_key(self, key: str):
