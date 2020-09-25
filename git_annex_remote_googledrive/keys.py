@@ -13,6 +13,7 @@ from pathlib import Path
 from pathlib import PurePath
 from os import PathLike
 import abc
+import itertools
 
 from drivelib import GoogleDrive
 from drivelib import DriveFile
@@ -106,14 +107,52 @@ class RemoteRoot(RemoteRootBase):
     def _new_remote_file(self, key: str):
         raise NotImplementedError
 
+    def _is_descendant_of_root(self, f: DriveFile) -> bool:
+        path = ""
+        for p in f.parents:
+            path = "/".join((p.name,path))
+            if p == self.folder:
+                return True
+        return False
+
+    def _trash_empty_parents(self, parent: DriveFolder):
+        for p in itertools.chain([parent], parent.parents):
+            if p.isempty():
+                p.trash()
+            else:
+                break
+
+    def _find_elsewhere(self, key: str) -> DriveFile:
+        query = "name='{}'".format(key)
+        query += " and mimeType != 'application/vnd.google-apps.folder'"
+        query += " and trashed = false"
+        files = self.folder.drive.items_by_query(query)
+
+        for f in files:
+            if self._is_descendant_of_root(f):
+                return f
+        raise FileNotFoundError
+
 class NodirRemoteRoot(RemoteRoot):
     def __init__(self, rootfolder, uuid: str=None, local_appdir: Union(str, PathLike)=None):
         super().__init__(rootfolder, uuid=uuid, local_appdir=local_appdir)
         if next(self.folder.children(files=False), None):
-            raise HasSubdirError()
+            self.has_subdirs = True
+        else:
+            self.has_subdirs = False
 
-    def _lookup_remote_file(self, key):
-        return self.folder.child(key)
+    def _lookup_remote_file(self, key: str) -> DriveFile:
+        try: 
+            remote_file = self.folder.child(key)
+        except FileNotFoundError:
+            if self.has_subdirs:
+                remote_file = self._find_elsewhere(key)
+                original_parent = remote_file.parent
+                remote_file.move(self.folder)
+                self._trash_empty_parents(original_parent)
+            else:
+                raise
+        return remote_file
 
     def _new_remote_file(self, key):
         return self.folder.new_file(key)
