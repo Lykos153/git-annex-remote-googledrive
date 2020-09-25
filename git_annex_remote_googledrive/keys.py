@@ -22,6 +22,8 @@ from drivelib import NotAuthenticatedError, CheckSumError
 from drivelib import ResumableMediaUploadProgress, MediaDownloadProgress
 from drivelib import AmbiguousPathError
 
+from annexremote import Master as Annex
+
 from googleapiclient.errors import HttpError
 
 import logging
@@ -33,7 +35,8 @@ class HasSubdirError(Exception):
     pass
 
 class RemoteRootBase(abc.ABC):
-    def __init__(self, rootfolder: DriveFolder, uuid: str=None, local_appdir: Union(str, PathLike)=None):
+    def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
+        self.annex = annex
         self.folder = rootfolder
         self.uuid = uuid
         if local_appdir is not None:
@@ -62,8 +65,8 @@ class RemoteRootBase(abc.ABC):
         return self.folder.drive.json_creds()
 
 class RemoteRoot(RemoteRootBase):
-    def __init__(self, rootfolder, uuid: str=None, local_appdir: Union(str, PathLike)=None):
-        super().__init__(rootfolder, uuid=uuid, local_appdir=local_appdir)
+    def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
+        super().__init__(rootfolder, annex, uuid=uuid, local_appdir=local_appdir)
 
     def get_key(self, key: str) -> Key:
         try:
@@ -108,17 +111,20 @@ class RemoteRoot(RemoteRootBase):
         for p in f.parents:
             path = "/".join((p.name,path))
             if p == self.folder:
+                self.annex.debug("Found key in {}".format(path))
                 return True
         return False
 
     def _trash_empty_parents(self, parent: DriveFolder):
         for p in itertools.chain([parent], parent.parents):
             if p.isempty():
+                self.annex.debug("Trashing empty folder {}".format(p.name))
                 p.trash()
             else:
                 break
 
     def _find_elsewhere(self, key: str) -> DriveFile:
+        self.annex.debug("Not found. Trying differnt locations.")
         query = "name='{}'".format(key)
         query += " and mimeType != 'application/vnd.google-apps.folder'"
         query += " and trashed = false"
@@ -130,8 +136,8 @@ class RemoteRoot(RemoteRootBase):
         raise FileNotFoundError
 
 class NodirRemoteRoot(RemoteRoot):
-    def __init__(self, rootfolder, uuid: str=None, local_appdir: Union(str, PathLike)=None):
-        super().__init__(rootfolder, uuid=uuid, local_appdir=local_appdir)
+    def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
+        super().__init__(rootfolder, annex, uuid=uuid, local_appdir=local_appdir)
         if next(self.folder.children(files=False), None):
             self.has_subdirs = True
         else:
