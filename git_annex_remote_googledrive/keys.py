@@ -21,8 +21,10 @@ from drivelib import DriveFolder
 from drivelib import NotAuthenticatedError, CheckSumError
 from drivelib import ResumableMediaUploadProgress, MediaDownloadProgress
 from drivelib import AmbiguousPathError
+from drivelib.errors import NumberOfChildrenExceededError
 
 from annexremote import Master as Annex
+from annexremote import RemoteError
 
 from googleapiclient.errors import HttpError
 
@@ -163,15 +165,21 @@ class NestedRemoteRoot(RemoteRoot):
     def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
         super().__init__(rootfolder, annex, uuid=uuid, local_appdir=local_appdir)
         self.subfolders = self._get_subfolders()
+        self.full_message = "Remote root folder {} is full (max. 500.000 files exceeded)." \
+                            " Please drop at least one key from the remote, so it can automatically" \
+                            " migrate to the 'nested' layout.".format(self.folder.name)
+        self.folder_format = "05x"
         if len(self.subfolders) == 0:
-            #TODO Check for full folder
-            self.subfolders.append(self.folder.mkdir(format(0, "05x")))
+            try:
+                self._new_subfolder()
+            except NumberOfChildrenExceededError:
+                self.annex.info("WARNING: " + self.full_message)
 
     def _get_subfolders(self):
         f = []
         while(True):
             try:
-                f.append(self.folder.child(format(len(f), "05x")))
+                f.append(self.folder.child(format(len(f), self.folder_format)))
             except FileNotFoundError:
                 break
         return f
@@ -185,8 +193,23 @@ class NestedRemoteRoot(RemoteRoot):
 
 
     def _new_remote_file(self, key):
-        #TODO: Check for full folder
-        return self.subfolders[-1].new_file(key)
+        if len(self.subfolders) == 0:
+                raise RemoteError(self.full_message)
+        try:
+            return self.subfolders[-1].new_file(key)
+        except NumberOfChildrenExceededError:
+            #TODO: Will never happen, because error is only thrown when uploading. Maybe replace "new" with dedicated "upload" function
+            pass
+
+    def _new_subfolder(self):
+        try:
+            new_folder = self.folder.mkdir(format(len(self.subfolders), self.folder_format))
+        except NumberOfChildrenExceededError:
+            if len(self.subfolders > 0):
+                new_folder = self.subfolders[-1].mkdir(format(len(self.subfolders), self.folder_format))
+            else:
+                raise
+        self.subfolders.append(new_folder)
 
 
 
