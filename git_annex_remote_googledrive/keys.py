@@ -189,14 +189,18 @@ class NestedRemoteRoot(RemoteRoot):
             except NumberOfChildrenExceededError:
                 self.annex.info("WARNING: " + self.full_message)
 
-    def _get_subfolders(self):
-        f = []
-        while(True):
-            try:
-                f.append(self.folder.child(format(len(f), self.folder_format)))
-            except FileNotFoundError:
-                break
-        return f
+    def _subfolders(self, level=0, start=0):
+        existing_folders = self.folder.children(folders=True, files=False, orderBy="name", skip=start)
+        for i in itertools.count(start):
+            folder = next(existing_folders, None)
+            if folder:
+                folder.rename(format(i, self.folder_format))
+                yield folder
+            else:
+                try:
+                    yield self.folder.mkdir(format(i, self.folder_format))
+                except NumberOfChildrenExceededError:
+                    return
 
     def _lookup_remote_file(self, key):
         remote_file = self._find_elsewhere(key)
