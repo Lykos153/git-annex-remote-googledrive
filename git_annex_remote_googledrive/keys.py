@@ -108,6 +108,10 @@ class RemoteRoot(RemoteRootBase):
     def _new_remote_file(self, key: str):
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def handle_full_folder(self):
+        raise NotImplementedError
+
     def _is_descendant_of_root(self, f: DriveFile) -> bool:
         path = ""
         for p in f.parents:
@@ -161,6 +165,12 @@ class NodirRemoteRoot(RemoteRoot):
     def _new_remote_file(self, key):
         return self.folder.new_file(key)
 
+    def handle_full_folder(self):
+        error_message = "Remote root folder {} is full (max. 500.000 files exceeded)." \
+                            " Please switch to a different layout and drop at least one key "\
+                            " from the remote so it can automatically migrate.".format(self.folder.name)
+        raise RemoteError(error_message)
+
 class NestedRemoteRoot(RemoteRoot):
     def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
         super().__init__(rootfolder, annex, uuid=uuid, local_appdir=local_appdir)
@@ -211,6 +221,10 @@ class NestedRemoteRoot(RemoteRoot):
                 raise
         self.subfolders.append(new_folder)
 
+    def handle_full_folder(self):
+        raise NotImplementedError
+        #TODO
+        
 
 
 class Key():
