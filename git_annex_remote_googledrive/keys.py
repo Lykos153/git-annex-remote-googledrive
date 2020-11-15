@@ -148,6 +148,10 @@ class NodirRemoteRoot(RemoteRoot):
             self.has_subdirs = True
         else:
             self.has_subdirs = False
+        self.annex.info("WARNING: Google has introduced a maximum file count per folder."
+                        " Thus, `nodir` is no longer a good choice. Please consider migrating"
+                        " to a different layout.")
+        # automatically migrate to nested if nodir wasn't explicitely asked for
 
     def _lookup_remote_file(self, key: str) -> DriveFile:
         try: 
