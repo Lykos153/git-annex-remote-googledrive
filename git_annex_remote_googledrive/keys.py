@@ -189,23 +189,32 @@ class NestedRemoteRoot(RemoteRoot):
         self.reserved_name = "sub"
 
         if self.current_folder is None:
-            self.current_folder = self.next_subfolder().create_shortcut("cur", parent=self.folder)
+            self.current_folder = self.next_subfolder()
 
 
     @property
     def current_folder(self):
         if not hasattr(self, "_current_folder"):
             try:
-                self._current_folder = self.folder.child("cur")
+                self._current_folder_link = self.folder.child("cur")
             except FileNotFoundError:
-                self._current_folder = None
-        return self._current_folder
+                self._current_folder_link = None
+        if self._current_folder_link:
+            return self._current_folder_link.target
+        else:
+            return None
+
+    @current_folder.setter
+    def current_folder(self, new_target: DriveFolder):
+        if self.current_folder:
+            self._current_folder_link.remove()
+        self._current_folder_link = new_target.create_shortcut("cur", parent=self.folder)
             
     def next_subfolder(self):
         if not hasattr(self, "_subfolders"):
             if self.current_folder:
-                parent_level = self.current_folder.target.parent
-                start_count = int(self.current_folder.target.name, 16)+1 # assumes folder format is hex. Maybe use parse module instead
+                parent_level = self.current_folder.parent
+                start_count = int(self.current_folder.name, 16)+1 # assumes folder format is hex. Maybe use parse module instead
             else:
                 parent_level = self.folder
                 start_count = 0
@@ -242,8 +251,7 @@ class NestedRemoteRoot(RemoteRoot):
         return self.current_folder.new_file(key)
 
     def handle_full_folder(self):
-        self.current_folder.remove()
-        self.current_folder = self.next_subfolder().create_shortcut("cur", parent=self.folder)
+        self.current_folder = self.next_subfolder()
 
 class Key():
     def __init__(self, root: RemoteRootBase, key: str, remote_file: DriveFile):
