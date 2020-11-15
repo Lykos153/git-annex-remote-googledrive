@@ -178,62 +178,68 @@ class NodirRemoteRoot(RemoteRoot):
 class NestedRemoteRoot(RemoteRoot):
     def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
         super().__init__(rootfolder, annex, uuid=uuid, local_appdir=local_appdir)
-        self.subfolders = self._get_subfolders()
         self.full_message = "Remote root folder {} is full (max. 500.000 files exceeded)." \
                             " Please drop at least one key from the remote, so it can automatically" \
                             " migrate to the 'nested' layout.".format(self.folder.name)
-        self.folder_format = "05x"
-        if len(self.subfolders) == 0:
-            try:
-                self._new_subfolder()
-            except NumberOfChildrenExceededError:
-                self.annex.info("WARNING: " + self.full_message)
+        self.folder_format = "05x" # subfolders() depends on this not being changed. Maybe use parse module?
+        self.reserved_name = "sub"
 
-    def _subfolders(self, level=0, start=0):
-        existing_folders = self.folder.children(folders=True, files=False, orderBy="name", skip=start)
+        if self.current_folder is None:
+            self.current_folder = self.next_subfolder().create_shortcut("cur", parent=self.folder)
+
+
+    @property
+    def current_folder(self):
+        if not hasattr(self, "_current_folder"):
+            try:
+                self._current_folder = self.folder.child("cur")
+            except FileNotFoundError:
+                self._current_folder = None
+        return self._current_folder
+            
+    def next_subfolder(self):
+        if not hasattr(self, "_subfolders"):
+            if self.current_folder:
+                parent_level = self.current_folder.target.parent
+                start_count = int(self.current_folder.target.name, 16)+1 # assumes folder format is hex. Maybe use parse module instead
+            else:
+                parent_level = self.folder
+                start_count = 0
+            self._subfolders = self._sub_generator(parent_folder=parent_level, start=start_count)
+        return next(self._subfolders)
+
+    def _sub_generator(self, parent_folder=None, start=0):
+        parent_folder = parent_folder or self.folder
+        try:
+            reserved_subfolder = parent_folder.create_path(self.reserved_name)
+        except NumberOfChildrenExceededError:
+            self.annex.info("WARNING: "+self.full_message)
+            return
+
+        existing_folders = parent_folder.children(folders=True, files=False, orderBy="name", skip=start)
         for i in itertools.count(start):
             folder = next(existing_folders, None)
             if folder:
-                folder.rename(format(i, self.folder_format))
-                yield folder
+                if folder.name != self.reserved_name:
+                    folder.rename(format(i, self.folder_format))
+                    yield folder
             else:
                 try:
                     yield self.folder.mkdir(format(i, self.folder_format))
                 except NumberOfChildrenExceededError:
-                    return
+                    yield from self._subfolders(parent_folder=reserved_subfolder)
 
     def _lookup_remote_file(self, key):
-        remote_file = self._find_elsewhere(key)
-        if remote_file.parent not in self.subfolders:
-            #TODO support nested folders
-            remote_file.move(self.subfolders[-1])
-        return remote_file
-
+        return self._find_elsewhere(key)
 
     def _new_remote_file(self, key):
-        if len(self.subfolders) == 0:
-                raise RemoteError(self.full_message)
-        try:
-            return self.subfolders[-1].new_file(key)
-        except NumberOfChildrenExceededError:
-            #TODO: Will never happen, because error is only thrown when uploading. Maybe replace "new" with dedicated "upload" function
-            pass
-
-    def _new_subfolder(self):
-        try:
-            new_folder = self.folder.mkdir(format(len(self.subfolders), self.folder_format))
-        except NumberOfChildrenExceededError:
-            if len(self.subfolders > 0):
-                new_folder = self.subfolders[-1].mkdir(format(len(self.subfolders), self.folder_format))
-            else:
-                raise
-        self.subfolders.append(new_folder)
+        if self.current_folder is None:
+            raise RemoteError("Remote folder is full. Cannot upload key.")
+        return self.current_folder.new_file(key)
 
     def handle_full_folder(self):
-        raise NotImplementedError
-        #TODO
-        
-
+        self.current_folder.remove()
+        self.current_folder = self.next_subfolder().create_shortcut("cur", parent=self.folder)
 
 class Key():
     def __init__(self, root: RemoteRootBase, key: str, remote_file: DriveFile):
