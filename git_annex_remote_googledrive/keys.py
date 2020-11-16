@@ -14,6 +14,7 @@ from pathlib import PurePath
 from os import PathLike
 import abc
 import itertools
+import uuid
 
 from drivelib import GoogleDrive
 from drivelib import DriveFile
@@ -181,62 +182,52 @@ class NestedRemoteRoot(RemoteRoot):
         self.full_message = "Remote root folder {} is full (max. 500.000 files exceeded)." \
                             " Please drop at least one key from the remote, so it can automatically" \
                             " migrate to the 'nested' layout.".format(self.folder.name)
-        self.folder_format = "05x" # subfolders() depends on this not being changed. Maybe use parse module?
-        self.reserved_name = "sub"
-
-        if self.current_folder is None:
-            self.current_folder = self.next_subfolder()
-
+        self.reserved_name = "00000000-0000-0000-0000-000000000000"
+        self.full_suffix = "-FULL"
 
     @property
     def current_folder(self):
         if not hasattr(self, "_current_folder"):
-            try:
-                self._current_folder_link = self.folder.child("cur")
-            except FileNotFoundError:
-                self._current_folder_link = None
-        if self._current_folder_link:
-            return self._current_folder_link.target
-        else:
-            return None
+            self._current_folder = self.next_subfolder()
+        return self._current_folder
 
     @current_folder.setter
     def current_folder(self, new_target: DriveFolder):
-        if self.current_folder:
-            self._current_folder_link.remove()
-        self._current_folder_link = new_target.create_shortcut("cur", parent=self.folder)
-            
+        self._current_folder = new_target
+
     def next_subfolder(self):
         if not hasattr(self, "_subfolders"):
-            if self.current_folder:
-                parent_level = self.current_folder.parent
-                start_count = int(self.current_folder.name, 16)+1 # assumes folder format is hex. Maybe use parse module instead
-            else:
-                parent_level = self.folder
-                start_count = 0
-            self._subfolders = self._sub_generator(parent_folder=parent_level, start=start_count)
-        return next(self._subfolders)
+            self._subfolders = self._sub_generator(self.folder)
+        f = next(self._subfolders)
+        print("hallo")
+        return f
 
-    def _sub_generator(self, parent_folder=None, start=0):
+    def _sub_generator(self, parent_folder=None):
         parent_folder = parent_folder or self.folder
         try:
-            reserved_subfolder = parent_folder.create_path(self.reserved_name)
+            reserved_subfolder = parent_folder.mkdir(self.reserved_name)
         except NumberOfChildrenExceededError:
             self.annex.info("WARNING: "+self.full_message)
             return
 
-        existing_folders = parent_folder.children(folders=True, files=False, orderBy="name", skip=start)
-        for i in itertools.count(start):
-            folder = next(existing_folders, None)
-            if folder:
-                if folder.name != self.reserved_name:
-                    folder.rename(format(i, self.folder_format))
-                    yield folder
+
+        query =     "'{}' in parents".format(self.folder.id)
+        query +=    " and not name contains '{}'".format(self.full_suffix)
+        query +=    " and name != '{}'".format(self.reserved_name)
+        query +=    " and mimeType = 'application/vnd.google-apps.folder'"
+        query +=    " and trashed = false"
+        yield from self.folder.drive.items_by_query(query)
+
+
+        while True:
+            try:
+                new_folder = parent_folder.mkdir(str(uuid.uuid4()))
+            except NumberOfChildrenExceededError:
+                break
             else:
-                try:
-                    yield self.folder.mkdir(format(i, self.folder_format))
-                except NumberOfChildrenExceededError:
-                    yield from self._subfolders(parent_folder=reserved_subfolder)
+                yield new_folder
+
+        yield from self._sub_generator(parent_folder=reserved_subfolder)
 
     def _lookup_remote_file(self, key):
         return self._find_elsewhere(key)
@@ -247,6 +238,7 @@ class NestedRemoteRoot(RemoteRoot):
         return self.current_folder.new_file(key)
 
     def handle_full_folder(self):
+        self.current_folder.rename(self.current_folder.name+self.full_suffix)
         self.current_folder = self.next_subfolder()
 
 class Key():
