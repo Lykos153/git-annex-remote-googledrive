@@ -1,2 +1,3 @@
 include versioneer.py
 include README.md
+include git_annex_remote_googledrive/_version.py
