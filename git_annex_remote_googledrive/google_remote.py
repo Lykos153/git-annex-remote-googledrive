@@ -21,6 +21,7 @@ from . import _default_client_id as DEFAULT_CLIENT_ID
 
 from drivelib import GoogleDrive
 from drivelib import Credentials
+from drivelib.errors import NumberOfChildrenExceededError
 
 from .keys import Key, NodirRemoteRoot, NestedRemoteRoot
 from .keys import ExportRemoteRoot, ExportKey
@@ -266,10 +267,19 @@ class GoogleRemote(annexremote.ExportRemote):
         else:
             upload_path = fpath
 
-        self.root.new_key(key).upload(
-                        str(upload_path), 
-                        chunksize=self.chunksize,
-                        progress_handler=self.annex.progress)
+        def try_upload():
+            self.root.new_key(key).upload(
+                            str(upload_path), 
+                            chunksize=self.chunksize,
+                            progress_handler=self.annex.progress)
+
+
+        try:
+            try_upload()
+        except NumberOfChildrenExceededError:
+            self.root.handle_full_folder()
+            try_upload()
+
         new_path.unlink(missing_ok=True)
 
     @send_version_on_error
