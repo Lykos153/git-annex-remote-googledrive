@@ -202,8 +202,7 @@ class NestedRemoteRoot(RemoteRoot):
     def next_subfolder(self):
         if not hasattr(self, "_subfolders"):
             self._subfolders = self._sub_generator(self.folder)
-        f = next(self._subfolders)
-        print("hallo")
+        f = next(self._subfolders, None)
         return f
 
     def _sub_generator(self, parent_folder=None):
