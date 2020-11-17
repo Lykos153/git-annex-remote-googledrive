@@ -182,6 +182,7 @@ class GoogleRemote(annexremote.ExportRemote):
             return_dict['remote prefix'] = prefix
         else:
             return_dict['remote root-id'] = self.annex.getconfig("root_id")
+        return_dict['transfer chunk size'] = humanfriendly.format_size(self.chunksize, binary=True)
         return return_dict
 
     @info.setter
