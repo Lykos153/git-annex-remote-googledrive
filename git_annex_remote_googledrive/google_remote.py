@@ -233,7 +233,7 @@ class GoogleRemote(annexremote.ExportRemote):
 
         try:
             with token_file.open('r') as fp:
-                credentials = fp.read()
+                credentials = ''.join(fp.read().split())
         except Exception as e:
             if token_config:
                 raise RemoteError("Could not read token file {}:".format(token_file), e)
