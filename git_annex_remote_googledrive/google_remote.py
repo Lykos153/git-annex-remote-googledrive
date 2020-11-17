@@ -81,6 +81,8 @@ class GoogleRemote(annexremote.ExportRemote):
         self.configs = {
             'prefix': "The path to the folder that will be used for the remote."
                         " If it doesn't exist, it will be created.",
+            'gdrive_layout': "How the keys should be stored in the remote folder."
+                             "Available options: `nested`(default) and `nodir`.",
             'root_id': "Instead of the path, you can specify the ID of a folder."
                         " The folder must already exist. This will make it independent"
                         " from the path and it will always be found by git-annex, no matter"
@@ -112,7 +114,13 @@ class GoogleRemote(annexremote.ExportRemote):
             if exporttree == "yes":
                 root_class = ExportRemoteRoot
             else:
-                root_class = NestedRemoteRoot
+                layout_mapping = {
+                    'nodir':    NodirRemoteRoot,
+                    'nested':   NestedRemoteRoot,
+                }
+                root_class = layout_mapping.get(self.layout, None)
+                if root_class is None:
+                    raise RemoteError("`gdrive_layout` must be one of {}".format(list(layout_mapping.keys())))
 
             try:
                 if prefix:
@@ -158,6 +166,22 @@ class GoogleRemote(annexremote.ExportRemote):
         return self._local_appdir
 
     @property
+    def layout(self):
+        gdrive_layout = self.annex.getconfig("gdrive_layout")
+        rclone_layout = self.annex.getconfig("rclone_layout")
+        default_layout = "nested"
+
+        # delete rclone_layout but import it beforehand if gdrive_layout wasn't set
+        if rclone_layout:
+            if gdrive_layout:
+                self.annex.setconfig("rclone_layout", "")
+            else:
+                self.annex.setconfig("gdrive_layout", rclone_layout)
+                self.annex.setconfig("rclone_layout", "")
+        
+        return gdrive_layout or rclone_layout or default_layout
+
+    @property
     def info(self):
         return_dict = {}
         prefix = self.annex.getconfig("prefix")
@@ -165,6 +189,7 @@ class GoogleRemote(annexremote.ExportRemote):
             return_dict['remote prefix'] = prefix
         else:
             return_dict['remote root-id'] = self.annex.getconfig("root_id")
+        return_dict['remote layout'] = self.layout
         return_dict['transfer chunk size'] = humanfriendly.format_size(self.chunksize, binary=True)
         return return_dict
 
