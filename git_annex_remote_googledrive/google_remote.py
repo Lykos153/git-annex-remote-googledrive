@@ -109,7 +109,7 @@ class GoogleRemote(annexremote.ExportRemote):
             prefix = self.annex.getconfig('prefix')
             root_id = self.annex.getconfig('root_id')
             exporttree = self.annex.getconfig('exporttree')
-            if exporttree:
+            if exporttree == "yes":
                 root_class = ExportRemoteRoot
             else:
                 root_class = NestedRemoteRoot
