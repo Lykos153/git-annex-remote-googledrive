@@ -187,7 +187,8 @@ class NestedRemoteRoot(RemoteRoot):
         self.full_message = "Remote root folder {} is full (max. 500.000 files exceeded)." \
                             " Please drop at least one key from the remote, so it can automatically" \
                             " migrate to the 'nested' layout.".format(self.folder.name)
-        self.reserved_name = "00000000-0000-0000-0000-000000000000"
+        self.nested_prefix = "NESTED-"
+        self.reserved_name = self.nested_prefix+"00000000-0000-0000-0000-000000000000"
         self.full_suffix = "-FULL"
 
     @property
@@ -225,7 +226,7 @@ class NestedRemoteRoot(RemoteRoot):
 
         while True:
             try:
-                new_folder = parent_folder.mkdir(str(uuid.uuid4()))
+                new_folder = parent_folder.mkdir(self.nested_prefix+str(uuid.uuid4()))
             except NumberOfChildrenExceededError:
                 break
             else:
