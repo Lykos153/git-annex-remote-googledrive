@@ -227,9 +227,6 @@ class NodirRemoteRoot(RemoteRoot):
 class NestedRemoteRoot(RemoteRoot):
     def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
         super().__init__(rootfolder, annex, uuid=uuid, local_appdir=local_appdir)
-        self.full_message = "Remote root folder {} is full (max. 500.000 files exceeded)." \
-                            " Please drop at least one key from the remote, so it can automatically" \
-                            " migrate to the 'nested' layout.".format(self.folder.name)
         self.nested_prefix = "NESTED-"
         self.reserved_name = self.nested_prefix+"00000000-0000-0000-0000-000000000000"
         self.full_suffix = "-FULL"
@@ -255,7 +252,6 @@ class NestedRemoteRoot(RemoteRoot):
         try:
             reserved_subfolder = parent_folder.mkdir(self.reserved_name)
         except NumberOfChildrenExceededError:
-            self.annex.info("WARNING: "+self.full_message)
             return
 
 
@@ -298,7 +294,7 @@ class NestedRemoteRoot(RemoteRoot):
                                         " for instructions to do it manually."
                                     )
             else:
-                raise RemoteError(  "Remote folder is full. Cannot upload key."
+                raise RemoteError(  "Remote folder is full (max. 500.000 files exceeded). Cannot upload key."
                                     " Invoke `enableremote` with `auto_fix_full=yes`"
                                     " or consult https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder"
                                     " for instructions to do it manually."
