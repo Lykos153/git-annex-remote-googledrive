@@ -146,6 +146,45 @@ class RemoteRoot(RemoteRootBase):
                 return f
         raise FileNotFoundError
 
+    def _auto_fix_full(self):
+        self.annex.info("Remote folder full. Fixing...")
+        original_prefix = self.folder.name
+        new_root = None
+        try:
+            new_root = self.folder.parent.mkdir(self.folder.name+".new")
+            self.annex.debug("Created folder {}({})".format(new_root.name, new_root.id))
+        except:
+            raise RemoteError("Couldn't create new folder in {parent_name} ({parent_id})"
+                        " Nothing was changed."
+                        " Please consult https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder"
+                        " for instructions to fix it manually.".format(
+                                parent_name = self.folder.parent.name,
+                                parent_id = self.folder.parent.id
+                            )
+                        )
+        try:
+            self.folder.move(new_root, new_name=original_prefix+".old")
+        except:
+            # new_root.rmdir()
+            raise RemoteError("Couldn't move the root folder."
+                        " Nothing was changed."
+                        " Please consult https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder"
+                        " for instructions to fix it manually."
+                        )
+        try:
+            new_root.rename(original_prefix)
+        except:
+            raise RemoteError("Couldn't rename new folder to prefix."
+                        " Please manually rename {new_name} ({new_id}) to {prefix}.".format(
+                                                        new_name = new_root.name,
+                                                        new_id = new_root.id,
+                                                        prefix = original_prefix
+                                                    )
+                        )
+        self.annex.info("Success")
+
+        self.folder = new_root
+
 class NodirRemoteRoot(RemoteRoot):
     def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
         super().__init__(rootfolder, annex, uuid=uuid, local_appdir=local_appdir)
@@ -238,43 +277,7 @@ class NestedRemoteRoot(RemoteRoot):
         return self._find_elsewhere(key)
 
     def _auto_fix_full(self):
-        self.annex.info("Remote folder full. Fixing...")
-        original_prefix = self.folder.name
-        new_root = None
-        try:
-            new_root = self.folder.parent.mkdir(self.folder.name+".new")
-            self.annex.debug("Created folder {}({})".format(new_root.name, new_root.id))
-        except:
-            raise RemoteError("Couldn't create new folder in {parent_name} ({parent_id})"
-                        " Nothing was changed."
-                        " Please consult https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder"
-                        " for instructions to fix it manually.".format(
-                                parent_name = self.folder.parent.name,
-                                parent_id = self.folder.parent.id
-                            )
-                        )
-        try:
-            self.folder.move(new_root, new_name=original_prefix+".old")
-        except:
-            # new_root.rmdir()
-            raise RemoteError("Couldn't move the root folder."
-                        " Nothing was changed."
-                        " Please consult https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder"
-                        " for instructions to fix it manually."
-                        )
-        try:
-            new_root.rename(original_prefix)
-        except:
-            raise RemoteError("Couldn't rename new folder to prefix."
-                        " Please manually rename {new_name} ({new_id}) to {prefix}.".format(
-                                                        new_name = new_root.name,
-                                                        new_id = new_root.id,
-                                                        prefix = original_prefix
-                                                    )
-                        )
-        self.annex.info("Success")
-
-        self.folder = new_root
+        super()._auto_fix_full()
         del self._subfolders
         self.current_folder = self.next_subfolder()
 
