@@ -40,6 +40,7 @@ class HasSubdirError(Exception):
 
 class RemoteRootBase(abc.ABC):
     def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
+        self.creator = None
         self.annex = annex
         self.folder = rootfolder
         self.uuid = uuid
@@ -50,14 +51,18 @@ class RemoteRootBase(abc.ABC):
     def from_path(cls, creds_json, rootpath, *args, **kwargs) -> cls:
         drive = GoogleDrive(creds_json)
         root = drive.create_path(rootpath)
-        return cls(root, *args, **kwargs)
+        new_obj = cls(root, *args, **kwargs)
+        new_obj.creator = "from_path"
+        return new_obj
 
     @classmethod
     def from_id(cls, creds_json, root_id, *args, **kwargs) -> cls:
         drive = GoogleDrive(creds_json)
         root = drive.item_by_id(root_id)
         if root.isfolder():
-            return cls(root, *args, **kwargs)
+            new_obj = cls(root, *args, **kwargs)
+            new_obj.creator = "from_path"
+            return new_obj
         else:
             raise FileNotFoundError("ID {} is not a folder".format(root_id))
 
@@ -135,7 +140,6 @@ class RemoteRoot(RemoteRootBase):
                 break
 
     def _find_elsewhere(self, key: str) -> DriveFile:
-        self.annex.debug("Not found. Trying differnt locations.")
         query = "name='{}'".format(key)
         query += " and mimeType != 'application/vnd.google-apps.folder'"
         query += " and trashed = false"
@@ -163,6 +167,7 @@ class NodirRemoteRoot(RemoteRoot):
             remote_file = self.folder.child(key)
         except FileNotFoundError:
             if self.has_subdirs:
+                self.annex.debug("Not found. Trying different locations.")
                 remote_file = self._find_elsewhere(key)
                 original_parent = remote_file.parent
                 remote_file.move(self.folder)
@@ -235,9 +240,65 @@ class NestedRemoteRoot(RemoteRoot):
     def _lookup_remote_file(self, key):
         return self._find_elsewhere(key)
 
+    def _auto_fix_full(self):
+        self.annex.info("Remote folder full. Fixing...")
+        original_prefix = self.folder.name
+        new_root = None
+        try:
+            new_root = self.folder.parent.mkdir(self.folder.name+".new")
+            self.annex.debug("Created folder {}({})".format(new_root.name, new_root.id))
+        except:
+            raise RemoteError("Couldn't create new folder in {parent_name} ({parent_id})"
+                        " Nothing was changed."
+                        " Please consult https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder"
+                        " for instructions to fix it manually.".format(
+                                parent_name = self.folder.parent.name,
+                                parent_id = self.folder.parent.id
+                            )
+                        )
+        try:
+            self.folder.move(new_root, new_name=original_prefix+".old")
+        except:
+            # new_root.rmdir()
+            raise RemoteError("Couldn't move the root folder."
+                        " Nothing was changed."
+                        " Please consult https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder"
+                        " for instructions to fix it manually."
+                        )
+        try:
+            new_root.rename(original_prefix)
+        except:
+            raise RemoteError("Couldn't rename new folder to prefix."
+                        " Please manually rename {new_name} ({new_id}) to {prefix}.".format(
+                                                        new_name = new_root.name,
+                                                        new_id = new_root.id,
+                                                        prefix = original_prefix
+                                                    )
+                        )
+        self.annex.info("Success")
+
+        self.folder = new_root
+        del self._subfolders
+        self.current_folder = self.next_subfolder()
+
+
     def _new_remote_file(self, key):
         if self.current_folder is None:
-            raise RemoteError("Remote folder is full. Cannot upload key.")
+            if self.annex.getconfig("auto_fix_full") == "yes":
+                if self.creator != "from_id":
+                    self._auto_fix_full()
+                else:
+                    raise RemoteError(  "Remote folder full."
+                                        " Can't fix automatically, because folder is specified by id."
+                                        " Please consult https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder"
+                                        " for instructions to do it manually."
+                                    )
+            else:
+                raise RemoteError(  "Remote folder is full. Cannot upload key."
+                                    " Invoke `enableremote` with `auto_fix_full=yes`"
+                                    " or consult https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder"
+                                    " for instructions to do it manually."
+                                )
         return self.current_folder.new_file(key)
 
     def handle_full_folder(self):

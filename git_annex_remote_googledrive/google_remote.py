@@ -104,6 +104,8 @@ class GoogleRemote(annexremote.ExportRemote):
             'mute-api-lockdown-warning':
                         "Set to 'true' if you don't want to see the warning.",
             'token':    "Token file that was created by `git-annex-remote-googledrive setup`",
+            'auto_fix_full':    "`yes` if the remote should try to fix full-folder issues"
+                                " automatically. See https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder",
         }
 
     @property
