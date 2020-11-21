@@ -152,8 +152,9 @@ class RemoteRoot(RemoteRootBase):
         original_prefix = self.folder.name
         new_root = None
         try:
+            self.annex.info("Creating new root folder")
             new_root = self.folder.parent.mkdir(self.folder.name+".new")
-            self.annex.debug("Created folder {}({})".format(new_root.name, new_root.id))
+            self.annex.info("Created as {}({})".format(new_root.name, new_root.id))
         except:
             raise RemoteError("Couldn't create new folder in {parent_name} ({parent_id})"
                         " Nothing was changed."
@@ -164,7 +165,9 @@ class RemoteRoot(RemoteRootBase):
                             )
                         )
         try:
-            self.folder.move(new_root, new_name=original_prefix+".old")
+            new_name=original_prefix+".old"
+            self.annex.info("Moving old root to new one, renaming to {}".format(new_name))
+            self.folder.move(new_root, new_name=new_name)
         except:
             # new_root.rmdir()
             raise RemoteError("Couldn't move the root folder."
@@ -173,6 +176,7 @@ class RemoteRoot(RemoteRootBase):
                         " for instructions to fix it manually."
                         )
         try:
+            self.annex.info("Renaming new root to original prefix: {}".format(original_prefix))
             new_root.rename(original_prefix)
         except:
             raise RemoteError("Couldn't rename new folder to prefix."
