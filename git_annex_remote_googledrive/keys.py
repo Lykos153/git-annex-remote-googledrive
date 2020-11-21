@@ -15,6 +15,7 @@ from os import PathLike
 import abc
 import itertools
 import uuid
+from typing import Union
 
 from drivelib import GoogleDrive
 from drivelib import DriveFile
