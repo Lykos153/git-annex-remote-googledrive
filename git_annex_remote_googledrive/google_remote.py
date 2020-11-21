@@ -62,18 +62,16 @@ retry_conditions = {
         'reraise': True,
     }
     
-def send_traceback(f):
+def send_version_on_error(f):
     @wraps(f)
-    def wrapper(self, *args, **kwargs):
+    def send_version_wrapper(self, *args, **kwargs):
         try:
             return f(self, *args, **kwargs)
         except:
             self._send_version()
-            for line in traceback.format_exc().splitlines():
-                self.annex.debug(line)
             raise
 
-    return wrapper
+    return send_version_wrapper
 
 def connect(exporttree=False):
     if exporttree:
@@ -213,7 +211,7 @@ class GoogleRemote(annexremote.ExportRemote):
             self._credentials = creds
             self.annex.setcreds('credentials', creds, '')
 
-    @send_traceback
+    @send_version_on_error
     def initremote(self):
         self._send_version()
         prefix = self.annex.getconfig('prefix')
@@ -273,7 +271,7 @@ class GoogleRemote(annexremote.ExportRemote):
             self._info("You can mute this warning by issuing 'git annex enableremote <remote-name> mute-api-lockdown-warning=true'")
             self._info("======")
 
-    @send_traceback
+    @send_version_on_error
     @retry(**retry_conditions)
     @connect()
     def transfer_store(self, key, fpath):
@@ -296,7 +294,7 @@ class GoogleRemote(annexremote.ExportRemote):
                         progress_handler=self.annex.progress)
         new_path.unlink(missing_ok=True)
 
-    @send_traceback
+    @send_version_on_error
     @retry(**retry_conditions)
     @connect()
     def transfer_retrieve(self, key, fpath):
@@ -305,7 +303,7 @@ class GoogleRemote(annexremote.ExportRemote):
                     chunksize=self.chunksize,
                     progress_handler=self.annex.progress)
     
-    @send_traceback
+    @send_version_on_error
     @retry(**retry_conditions)
     @connect()
     def checkpresent(self, key):
@@ -315,13 +313,13 @@ class GoogleRemote(annexremote.ExportRemote):
         except FileNotFoundError:
             return False
 
-    @send_traceback
+    @send_version_on_error
     @retry(**retry_conditions)
     @connect()
     def remove(self, key):
         self.root.delete_key(key)
 
-    @send_traceback
+    @send_version_on_error
     @retry(**retry_conditions)
     @connect(exporttree=True)
     def transferexport_store(self, key, fpath, name):
@@ -332,7 +330,7 @@ class GoogleRemote(annexremote.ExportRemote):
                 progress_handler=self.annex.progress
         )
 
-    @send_traceback
+    @send_version_on_error
     @retry(**retry_conditions)
     @connect(exporttree=True)
     def transferexport_retrieve(self, key, fpath, name):
@@ -342,7 +340,7 @@ class GoogleRemote(annexremote.ExportRemote):
             progress_handler=self.annex.progress
         )
 
-    @send_traceback
+    @send_version_on_error
     @retry(**retry_conditions)
     @connect(exporttree=True)
     def checkpresentexport(self, key, name):
@@ -352,13 +350,13 @@ class GoogleRemote(annexremote.ExportRemote):
         except FileNotFoundError:
             return False
 
-    @send_traceback
+    @send_version_on_error
     @retry(**retry_conditions)
     @connect(exporttree=True)
     def removeexport(self, key, name):
         self.root.delete_key(key, name)
 
-    @send_traceback
+    @send_version_on_error
     @retry(**retry_conditions)
     @connect(exporttree=True)
     def removeexportdirectory(self, directory):
@@ -367,7 +365,7 @@ class GoogleRemote(annexremote.ExportRemote):
         except NotADirectoryError:
             raise RemoteError("{} is a file. Not deleting".format(directory))
 
-    @send_traceback
+    @send_version_on_error
     @retry(**retry_conditions)
     @connect(exporttree=True)
     def renameexport(self, key, name, new_name):
