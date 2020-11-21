@@ -129,15 +129,16 @@ class Key():
                 logging.warning("Invalid resumable_uri. Probably expired. Repeating upload.")
             else:
                 raise
-        except FileExistsError:
-            # Uploading an existing key is not an error
-            return
-
+            
             self.resumable_uri = None
             self.file.upload(local_filename,
                              chunksize=chunksize,
                              progress_handler=self._upload_progress(progress_handler)
                             )
+        except FileExistsError:
+            # Uploading an existing key is not an error
+            return
+
         self.resumable_uri = None
 
     @property
