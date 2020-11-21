@@ -36,6 +36,14 @@ The initremote command calls out to GPG and can hang if a machine has insufficie
 Options specific to git-annex-remote-googledrive
 * `prefix` - The path to the folder that will be used for the remote. If it doesn't exist, it will be created.
 * `root_id` - Instead of the path, you can specify the ID of a folder. The folder must already exist. This will make it independent from the path and it will always be found by git-annex, no matter where you move it. Can also be used to access shared folders which you haven't added to "My Drive".
+* `layout` - How the keys should be stored in the remote folder. Available options: `nested`(default) and `nodir`.
+             You can switch layouts at any time. `git-annex-remote-googledrive` will then start to store new keys in the new
+             layout. It will always find existing keys, no matter in which layout they are stored. Existing keys will be
+             migrated to the current layout when accessed. Thus, to bring the remote in a consistent state, you can run
+             `git annex fsck --from <remote_name> --fast`. (Existing settings for `gdrive_layout` or `rclone_layout` are automatically
+             imported to `layout` in case you're migrating from a different remote.)
+* `auto_fix_full` - Set to `yes` if the remote should try to fix full-folder issues automatically. 
+                See https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder
 * `transferchunk` - Chunksize used for transfers. This is the minimum data which has to be retransmitted when resuming after a connection error. This also affects the progress display. It has to be distinguished from `chunk`. A value between 1MiB and 10MiB is recommended. Smaller values meaning less data to be re-transmitted when network connectivity is interrupted and result in a finer progress feedback. Bigger values create slightly less overhead and are therefore somewhat more efficient. Default: 5MiB
 
 General git-annex options
@@ -55,6 +63,26 @@ it's as simple as typing `git annex enableremote <remote_name> externaltype=goog
 If you have a huge remote and the migration takes very long, you can temporarily use the [bash based git-annex-remote-gdrive](https://github.com/Lykos153/git-annex-remote-gdrive) which can access the files during migration. I might add this functionality to this application as well ([#25](https://github.com/Lykos153/git-annex-remote-googledrive/issues/25)). 
 
 I decided not to support other layouts anymore as there is really no reason to have subfolders. Google Drive requires us to traverse the whole path on each file operation, which results in a noticeable performance loss (especially during upload of chunked files). On the other hand, it's perfectly fine to have thousands of files in one Google Drive folder as it doesn't even use a folder structure internally.
+
+## Fix full folder
+Since June 2020, Google enforces a limit of 500.000 items per folder, which makes the initial default layout `nodir` a bad choice.
+If you switch to a different layout before reaching the limit, then all is fine and `git-annex-remote-googledrive` will migrate automatically.
+However, if you've already hit the limit, additional steps need to be taken. In order to make the remote operational again,
+it needs to be able to create folders inside the base folder, thus we need to get below the limit. The simplest way to
+achieve this is to
+
+* Create a new folder
+* Move the remote folder inside the new folder
+* Rename the new folder to match the specified `prefix`. (Or, if you've configured the remote using `root_id`, run
+  `git annex enableremote <remote_name> root_id=<new_folder_id>`)
+  
+`git-annex-remote-googeldrive` can do those steps for you. In order to do this,
+you need to issue `git annex enableremote <remote_name> auto_fix_full=yes`. Next time it can't store a new key
+due to the limit, it will perform the above steps to migrate to the new layout.
+  
+As `git-annex-remoge-googledrive` is able to find any key that is inside its root folder, it will figure out the rest from here.
+You can run an `fsck` if you want, to get it to a consistent state, but that's not mandatory.
+
 
 ## Google Drive API lockdown
 Google has started to lockdown their Google Drive API in order to [enhance security controls](https://cloud.google.com/blog/products/identity-security/enhancing-security-controls-for-google-drive-third-party-apps) for the user. Developers are urged to "move to a per-file user consent model, allowing users to more precisely determine what files an app is allowed to access". Unfortunately they do not provide a way for a user to allow access to a specific folder, so git-annex-remote-googledrive still needs access to the entire Drive in order to function properly. This makes it necessary to get it verified by Google. Until the application is approved (IF it is approved), the OAuth consent screen will show a warning ([#31](https://github.com/Lykos153/git-annex-remote-googledrive/issues/31)) which the user needs to accept in order to proceed.
