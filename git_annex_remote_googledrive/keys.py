@@ -198,9 +198,8 @@ class NodirRemoteRoot(RemoteRoot):
         else:
             self.has_subdirs = False
         self.annex.info("WARNING: Google has introduced a maximum file count per folder."
-                        " Thus, `nodir` is no longer a good choice. Please consider migrating"
+                        " Thus, `nodir` layout is no longer a good choice. Please consider migrating"
                         " to a different layout.")
-        # automatically migrate to nested if nodir wasn't explicitely asked for
 
     def _lookup_remote_file(self, key: str) -> DriveFile:
         try: 
@@ -221,8 +220,8 @@ class NodirRemoteRoot(RemoteRoot):
 
     def handle_full_folder(self):
         error_message = "Remote root folder {} is full (max. 500.000 files exceeded)." \
-                            " Please switch to a different layout and drop at least one key "\
-                            " from the remote so it can automatically migrate.".format(self.folder.name)
+                            " Please switch to a different layout and consult"\
+                            " https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder.".format(self.folder.name)
         raise RemoteError(error_message)
 
 class NestedRemoteRoot(RemoteRoot):
