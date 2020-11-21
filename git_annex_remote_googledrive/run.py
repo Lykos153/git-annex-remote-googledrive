@@ -113,7 +113,7 @@ def main():
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest='subcommand')
 
-        parser_migrate = subparsers.add_parser('version',
+        parser_version = subparsers.add_parser('version',
                                     help='Show version of {} and relevant libraries'.format(__name__))
         parser_migrate = subparsers.add_parser('migrate',
                                     help='Migrate a folder to nodir structure')
