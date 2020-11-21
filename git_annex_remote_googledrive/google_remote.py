@@ -109,7 +109,7 @@ class GoogleRemote(annexremote.ExportRemote):
 
     @property
     def root(self):
-        if not hasattr(self, '_root') or self._root is None:
+        if not hasattr(self, '_root') or self._root is None: # pylint: disable=access-member-before-definition
             prefix = self.annex.getconfig('prefix')
             root_id = self.annex.getconfig('root_id')
             exporttree = self.annex.getconfig('exporttree')
