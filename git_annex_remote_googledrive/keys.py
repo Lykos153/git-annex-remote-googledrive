@@ -224,6 +224,28 @@ class NodirRemoteRoot(RemoteRoot):
                             " https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder.".format(self.folder.name)
         raise RemoteError(error_message)
 
+class LowerRemoteRoot(RemoteRoot):
+    def _lookup_parent(self, key: str) -> DriveFolder:
+        path = self.annex.dirhash_lower(key)
+        return self.folder.create_path(path)
+
+    def _migrate_remote_file(self, remote_file: DriveFile, new_parent: DriveFolder):
+        original_parent = remote_file.parent
+        # file will be replacing its own parent if migrating from directory layout
+        remote_file.move(new_parent, ignore_existing=(remote_file.name == remote_file.parent.name)) 
+        self._trash_empty_parents(original_parent)
+
+class DirectoryRemoteRoot(RemoteRoot):
+    def _lookup_parent(self, key: str) -> DriveFolder:
+        path = '/'.join((self.annex.dirhash_lower(key), key))
+        # FIXME: fails if migrating from lower layout
+        return self.folder.create_path(path)
+        
+class MixedRemoteRoot(RemoteRoot):
+    def _lookup_parent(self, key: str) -> DriveFolder:
+        path = self.annex.dirhash(key)
+        return self.folder.create_path(path)
+
 class NestedRemoteRoot(RemoteRoot):
     def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
         super().__init__(rootfolder, annex, uuid=uuid, local_appdir=local_appdir)
