@@ -58,10 +58,10 @@ If you're switching from any other special remote that works with Google Drive (
 
 ## Repository layouts
 The following layouts are currently supported:
-* nested - A tree structure with a maximum width of 500 000 nodes is used. This is the only layout that will never run full (by adding a new level every 499999*500000 keys).
-* lower - A two-level lower case directory hierarchy is used (using git-annex's DIRHASH-LOWER MD5-based format). This choice requires git-annex 6.20160511 or later. Runs full at 500000*16^6 keys.
-* mixed - A two-level mixed case directory hierarchy is used (using git-annex's DIRHASH format). Runs full at 500000*32^4 keys.
-* nodir - (deprecated) No directory hierarchy is used. This used to be the default layout for Google Drive until Google introduced the file limit. Runs full at 500000 keys and thus should be avoided.
+* `nested` - A tree structure with a maximum width of 500 000 nodes is used. This is the only layout that will never run full (by adding a new level every 499999*500000 keys).
+* `lower` - A two-level lower case directory hierarchy is used (using git-annex's DIRHASH-LOWER MD5-based format). This choice requires git-annex 6.20160511 or later. Runs full at 500000*16^6 keys.
+* `mixed` - A two-level mixed case directory hierarchy is used (using git-annex's DIRHASH format). Runs full at 500000*32^4 keys.
+* `nodir` - (deprecated) No directory hierarchy is used. This used to be the default layout for Google Drive until Google introduced the file limit. Runs full at 500000 keys and thus should be avoided.
 
 You can switch layouts at any time using `git annex enableremote <remote_name> layout=<new_layout>`. git-annex-remote-googledrive will then start to store new keys in the new
 layout. It will always find existing keys, no matter in which layout they are stored. Existing keys will be
