@@ -23,7 +23,7 @@ from drivelib import GoogleDrive
 from drivelib import Credentials
 from drivelib.errors import NumberOfChildrenExceededError
 
-from .keys import Key, NodirRemoteRoot, NestedRemoteRoot
+from .keys import Key, NodirRemoteRoot, NestedRemoteRoot, LowerRemoteRoot, DirectoryRemoteRoot, MixedRemoteRoot
 from .keys import ExportRemoteRoot, ExportKey
 from .keys import HasSubdirError, NotAFileError, NotAuthenticatedError
 
@@ -83,7 +83,7 @@ class GoogleRemote(annexremote.ExportRemote):
             'prefix': "The path to the folder that will be used for the remote."
                         " If it doesn't exist, it will be created.",
             'gdrive_layout': "How the keys should be stored in the remote folder."
-                             "Available options: `nested`(default) and `nodir`.",
+                             "Available options: `nested`(default), `nodir`, `lower` and `mixed`.",
             'root_id': "Instead of the path, you can specify the ID of a folder."
                         " The folder must already exist. This will make it independent"
                         " from the path and it will always be found by git-annex, no matter"
@@ -120,6 +120,9 @@ class GoogleRemote(annexremote.ExportRemote):
                 layout_mapping = {
                     'nodir':    NodirRemoteRoot,
                     'nested':   NestedRemoteRoot,
+                    'lower':    LowerRemoteRoot,
+                    #'directory': DirectoryRemoteRoot,
+                    'mixed':    MixedRemoteRoot,
                 }
                 root_class = layout_mapping.get(self.layout, None)
                 if root_class is None:
