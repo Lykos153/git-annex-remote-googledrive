@@ -107,17 +107,31 @@ class RemoteRoot(RemoteRootBase):
         except FileNotFoundError:
             pass
     
-    @abc.abstractmethod
-    def _lookup_remote_file(self, key: str):
-        raise NotImplementedError
+    def _lookup_remote_file(self, key: str) -> DriveFile:
+        remote_file = self._find_elsewhere(key)
+        parent = self._lookup_parent(key)
+        if remote_file.parent != parent:
+            self._migrate_remote_file(remote_file, parent)
+        return remote_file
+
+    def _migrate_remote_file(self, remote_file: DriveFile, new_parent: DriveFolder):
+        original_parent = remote_file.parent
+        remote_file.move(new_parent)
+        self._trash_empty_parents(original_parent)
 
     @abc.abstractmethod
-    def _new_remote_file(self, key: str):
+    def _lookup_parent(self, key: str) -> DriveFolder:
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def handle_full_folder(self):
-        raise NotImplementedError
+    def _new_remote_file(self, key: str) -> DriveFile:
+        return self._lookup_parent(key).new_file(key)
+
+    def handle_full_folder(self, key: str = None):
+        full_folder = self._lookup_parent(key).resolve()
+        error_message = "Remote root folder {} is full (max. 500.000 files exceeded)." \
+                            " Please switch to a different layout and consult"\
+                            " https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder.".format(full_folder)
+        raise RemoteError(error_message)
 
     def _is_descendant_of_root(self, f: DriveFile) -> bool:
         path = ""
@@ -201,24 +215,10 @@ class NodirRemoteRoot(RemoteRoot):
                         " Thus, `nodir` layout is no longer a good choice. Please consider migrating"
                         " to a different layout.")
 
-    def _lookup_remote_file(self, key: str) -> DriveFile:
-        try: 
-            remote_file = self.folder.child(key)
-        except FileNotFoundError:
-            if self.has_subdirs:
-                self.annex.debug("Not found. Trying different locations.")
-                remote_file = self._find_elsewhere(key)
-                original_parent = remote_file.parent
-                remote_file.move(self.folder)
-                self._trash_empty_parents(original_parent)
-            else:
-                raise
-        return remote_file
+    def _lookup_parent(self, key):
+        return self.folder
 
-    def _new_remote_file(self, key):
-        return self.folder.new_file(key)
-
-    def handle_full_folder(self):
+    def handle_full_folder(self, key=None):
         error_message = "Remote root folder {} is full (max. 500.000 files exceeded)." \
                             " Please switch to a different layout and consult"\
                             " https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder.".format(self.folder.name)
@@ -273,16 +273,13 @@ class NestedRemoteRoot(RemoteRoot):
 
         yield from self._sub_generator(parent_folder=reserved_subfolder)
 
-    def _lookup_remote_file(self, key):
-        return self._find_elsewhere(key)
-
     def _auto_fix_full(self):
         super()._auto_fix_full()
         del self._subfolders
         self.current_folder = self.next_subfolder()
 
 
-    def _new_remote_file(self, key):
+    def _new_remote_file(self, key) -> DriveFile:
         if self.current_folder is None:
             if self.annex.getconfig("auto_fix_full") == "yes":
                 if self.creator != "from_id":
@@ -301,7 +298,7 @@ class NestedRemoteRoot(RemoteRoot):
                                 )
         return self.current_folder.new_file(key)
 
-    def handle_full_folder(self):
+    def handle_full_folder(self, key=None):
         self.current_folder.rename(self.current_folder.name+self.full_suffix)
         self.current_folder = self.next_subfolder()
 
