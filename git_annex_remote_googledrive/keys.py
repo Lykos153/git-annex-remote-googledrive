@@ -19,6 +19,7 @@ from drivelib import DriveFolder
 from drivelib import NotAuthenticatedError, CheckSumError
 from drivelib import ResumableMediaUploadProgress, MediaDownloadProgress
 from drivelib import AmbiguousPathError
+from drivelib import Credentials
 
 from googleapiclient.errors import HttpError
 
@@ -58,6 +59,9 @@ class RemoteRootBase:
 
     def json_creds(self) -> str:
         return self.folder.drive.json_creds()
+
+    def creds(self) -> Credentials:
+        return self.folder.drive.creds
 
 class RemoteRoot(RemoteRootBase):
     def __init__(self, rootfolder, uuid: str=None, local_appdir: Union(str, PathLike)=None):

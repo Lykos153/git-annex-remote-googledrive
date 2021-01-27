@@ -20,6 +20,7 @@ from . import _default_client_id as DEFAULT_CLIENT_ID
 
 
 from drivelib import GoogleDrive
+from drivelib import Credentials
 
 from .keys import RemoteRoot, Key
 from .keys import ExportRemoteRoot, ExportKey
@@ -85,11 +86,13 @@ def connect(exporttree=False):
                 prefix = self.annex.getconfig('prefix')
                 root_id = self.annex.getconfig('root_id')
 
+                if self.credentials is None:
+                    raise RemoteError("Stored credentials are invalid. Please re-run `git-annex-remote-googledrive setup` and `git annex enableremote <remotename>`")
                 root = self._get_root(root_class, self.credentials, prefix, root_id)
                 if root.id != root_id:
                     raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
 
-                self.credentials = ''.join(root.json_creds().split())
+                self.credentials = root.creds()
                 
                 self.root = root
 
@@ -202,14 +205,19 @@ class GoogleRemote(annexremote.ExportRemote):
     @property
     def credentials(self):
         if not hasattr(self, '_credentials'):
-            self._credentials = self.annex.getcreds('credentials')['user']
+            json_creds = self.annex.getcreds('credentials')['user']
+            try:
+                self._credentials = Credentials.from_json(json_creds)
+            except json.decoder.JSONDecodeError:
+                self.annex.debug("Error decoding stored credentials: {}".format(json_creds))
+                self._credentials = None
         return self._credentials
 
     @credentials.setter
     def credentials(self, creds):
-        if not self.credentials or json.loads(creds) != json.loads(self.credentials):
+        if creds != self.credentials:
             self._credentials = creds
-            self.annex.setcreds('credentials', creds, '')
+            self.annex.setcreds('credentials', ''.join(Credentials.to_json(creds).split()), '')
 
     @send_version_on_error
     def initremote(self):
@@ -230,8 +238,7 @@ class GoogleRemote(annexremote.ExportRemote):
             token_file = othertmp_dir / "git-annex-remote-googledrive.token"
 
         try:
-            with token_file.open('r') as fp:
-                credentials = ''.join(fp.read().split())
+            credentials = Credentials.from_authorized_user_file(token_file)
         except Exception as e:
             if token_config:
                 raise RemoteError("Could not read token file {}:".format(token_file), e)
@@ -256,13 +263,13 @@ class GoogleRemote(annexremote.ExportRemote):
                 raise RemoteError("Specified folder has subdirectories. Are you sure 'prefix' or 'id' is set correctly? In case you're migrating from gdrive or rclone, run 'git-annex-remote-googledrive migrate {prefix}' first.".format(prefix=prefix))
         
         self.annex.setconfig('root_id', self.root.id)
-        self.credentials = ''.join(self.root.json_creds().split())
+        self.credentials = self.root.creds()
 
     def prepare(self):
         self._send_version()
 
         if self.annex.getconfig('mute-api-lockdown-warning') != "true" and \
-                json.loads(self.credentials)['client_id'] == DEFAULT_CLIENT_ID:
+                self.credentials.client_id == DEFAULT_CLIENT_ID:
 
             self._info("====== git-annex-remote-googledrive")
             self._info("IMPORTANT: Google has started to lockdown their Google Drive API. This might affect access to your Google Drive remotes.")
