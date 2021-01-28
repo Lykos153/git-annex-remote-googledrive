@@ -217,7 +217,7 @@ class NodirRemoteRoot(RemoteRoot):
             self.has_subdirs = False
         self.annex.info("WARNING: Google has introduced a maximum file count per folder."
                         " Thus, `nodir` layout is no longer a good choice. Please consider migrating"
-                        " to a different layout.")
+                        " to a different layout. See https://github.com/Lykos153/git-annex-remote-googledrive#repository-layouts")
 
     def _lookup_parent(self, key):
         return self.folder

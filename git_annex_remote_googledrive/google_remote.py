@@ -145,8 +145,6 @@ class GoogleRemote(annexremote.ExportRemote):
                     raise RemoteError("Prefix {} does not exist or does not point to a folder.".format(prefix))
                 else:
                     raise RemoteError("File ID {} does not exist or does not point to a folder.".format(root_id))
-            except HasSubdirError:
-                raise RemoteError("Specified folder has subdirectories. Are you sure 'prefix' or 'id' is set correctly? As of now, git-annex-remote-googledrive only supports the 'nodir' layout.")
 
             if root.id != root_id and not (hasattr(self, 'isinitremote') and self.isinitremote is True):
                 raise RemoteError("ID of root folder changed. Was the repo moved? Please check remote and re-run git annex enableremote")
@@ -178,15 +176,14 @@ class GoogleRemote(annexremote.ExportRemote):
     def layout(self):
         gdrive_layout = self.annex.getconfig("gdrive_layout")
         rclone_layout = self.annex.getconfig("rclone_layout")
-        default_layout = "nested"
+        default_layout = "nodir"
+        self.annex.info("No layout was specified. Defaulting to `nodir` for compatibility. This will change in v2.0.0.")
 
         # delete rclone_layout but import it beforehand if gdrive_layout wasn't set
         if rclone_layout:
-            if gdrive_layout:
-                self.annex.setconfig("rclone_layout", "")
-            else:
+            if not gdrive_layout:
                 self.annex.setconfig("gdrive_layout", rclone_layout)
-                self.annex.setconfig("rclone_layout", "")
+            self.annex.setconfig("rclone_layout", "")
         
         return gdrive_layout or rclone_layout or default_layout
 
