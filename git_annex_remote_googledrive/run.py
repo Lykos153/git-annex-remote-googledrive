@@ -113,12 +113,8 @@ def main():
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest='subcommand')
 
-        parser_migrate = subparsers.add_parser('version',
+        parser_version = subparsers.add_parser('version',
                                     help='Show version of {} and relevant libraries'.format(__name__))
-        parser_migrate = subparsers.add_parser('migrate',
-                                    help='Migrate a folder to nodir structure')
-        parser_migrate.add_argument('prefix', type=str,
-                                        help='Path to folder which should be migrated')
 
         parser_setup = subparsers.add_parser('setup',
                                     help='Authenticate with Google to prepare for initremote/enableremote')
@@ -146,30 +142,6 @@ def main():
             print(MODULENAME, __version__)
             print("Using AnnexRemote", annexremote_version)
             print("Using drivelib", drivelib_version)
-            return
-        elif args.subcommand == 'migrate':
-            with open(os.devnull, 'w') as devnull:
-                master = Master(devnull)
-                remote = GoogleRemote(master)
-                try:
-                    migration_count = remote.migrate(args.prefix)
-                except (KeyboardInterrupt, SystemExit):
-                    print ("\n{}Exiting.".format(bcolors.WARNING))
-                    print ("The remote is in an undefined state now. Re-run this script before using git-annex on it.")
-                except Exception as e:
-                    print ("\n{}Error: {}".format(bcolors.FAIL, e))
-                    print ("The remote is in an undefined state now. Re-run this script before using git-annex on it.")
-                else:
-                    print ("\n{}Finished.".format(bcolors.OKGREEN))
-                    print ("The remote has benn successfully migrated and can now be used with git-annex-remote-googledrive. Consider checking consistency with 'git annex fsck --from=<remotename> --fast'")
-                    print ( "Processed {} subfolders".format(
-                                    migration_count['deleted']))
-                    print ( "Moved {} files{}".format(
-                                migration_count['moved'],
-                                bcolors.ENDC
-                            )
-                    )
-
             return
 
     output = sys.stdout

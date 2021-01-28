@@ -12,6 +12,10 @@ from __future__ import annotations #only > 3.7, better to find a different solut
 from pathlib import Path
 from pathlib import PurePath
 from os import PathLike
+import abc
+import itertools
+import uuid
+from typing import Union
 
 from drivelib import GoogleDrive
 from drivelib import DriveFile
@@ -20,6 +24,10 @@ from drivelib import NotAuthenticatedError, CheckSumError
 from drivelib import ResumableMediaUploadProgress, MediaDownloadProgress
 from drivelib import AmbiguousPathError
 from drivelib import Credentials
+from drivelib.errors import NumberOfChildrenExceededError
+
+from annexremote import Master as Annex
+from annexremote import RemoteError
 
 from googleapiclient.errors import HttpError
 
@@ -31,8 +39,10 @@ class NotAFileError(Exception):
 class HasSubdirError(Exception):
     pass
 
-class RemoteRootBase:
-    def __init__(self, rootfolder: DriveFolder, uuid: str=None, local_appdir: Union(str, PathLike)=None):
+class RemoteRootBase(abc.ABC):
+    def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
+        self.creator = None
+        self.annex = annex
         self.folder = rootfolder
         self.uuid = uuid
         if local_appdir is not None:
@@ -42,14 +52,18 @@ class RemoteRootBase:
     def from_path(cls, creds_json, rootpath, *args, **kwargs) -> cls:
         drive = GoogleDrive(creds_json)
         root = drive.create_path(rootpath)
-        return cls(root, *args, **kwargs)
+        new_obj = cls(root, *args, **kwargs)
+        new_obj.creator = "from_path"
+        return new_obj
 
     @classmethod
     def from_id(cls, creds_json, root_id, *args, **kwargs) -> cls:
         drive = GoogleDrive(creds_json)
         root = drive.item_by_id(root_id)
         if root.isfolder():
-            return cls(root, *args, **kwargs)
+            new_obj = cls(root, *args, **kwargs)
+            new_obj.creator = "from_path"
+            return new_obj
         else:
             raise FileNotFoundError("ID {} is not a folder".format(root_id))
 
@@ -64,36 +78,31 @@ class RemoteRootBase:
         return self.folder.drive.creds
 
 class RemoteRoot(RemoteRootBase):
-    def __init__(self, rootfolder, uuid: str=None, local_appdir: Union(str, PathLike)=None):
-        super().__init__(rootfolder, uuid=uuid, local_appdir=local_appdir)
-        if next(self.folder.children(files=False), None):
-            raise HasSubdirError()
-        self._delete_test_keys()
+    def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
+        super().__init__(rootfolder, annex, uuid=uuid, local_appdir=local_appdir)
 
     def get_key(self, key: str) -> Key:
-        k = self.key(key)
-        if k.file.id:
-            return k
-        else:
-            raise FileNotFoundError
-
-    def key(self, key: str) -> Key:
         try:
-            remote_file = self.folder.child(key)
-        except AmbiguousPathError:
-            files = self.folder.children(name=key)
-            remote_file = next(files)
-            for current_file in files:
-                if current_file.md5sum == remote_file.md5sum:
-                    current_file.remove()
+            remote_file = self._lookup_remote_file(key)
+        except AmbiguousPathError as e:
+            if not hasattr(e, "duplicates"):
+                raise
+            remote_file = next(e.duplicates)
+            for dup in e.duplicates:
+                if dup.md5sum == remote_file.md5sum:
+                    dup.remove()
                 else:
                     raise
-        except FileNotFoundError:
-            # Uploading an existing key is not an error
-            remote_file = self.folder.new_file(key)
-            
+
         if remote_file.isfolder():
             raise NotAFileError(key)
+        return Key(self, key, remote_file)
+
+    def new_key(self, key: str) -> Key:
+        try:
+            remote_file = self._new_remote_file(key)
+        except FileExistsError:
+            return self.get_key(key)
         return Key(self, key, remote_file)
 
     def delete_key(self, key: str):
@@ -101,15 +110,223 @@ class RemoteRoot(RemoteRootBase):
             self.get_key(key).file.remove()
         except FileNotFoundError:
             pass
+    
+    def _lookup_remote_file(self, key: str) -> DriveFile:
+        remote_file = self._find_elsewhere(key)
+        parent = self._lookup_parent(key)
+        if remote_file.parent != parent:
+            self._migrate_remote_file(remote_file, parent)
+        return remote_file
 
-    def _delete_test_keys(self):
-        query = "'{root_id}' in parents and \
-                    name contains 'this-is-a-test-key'".format(
-                    root_id=self.folder.id
-                    )
+    def _migrate_remote_file(self, remote_file: DriveFile, new_parent: DriveFolder):
+        original_parent = remote_file.parent
+        remote_file.move(new_parent)
+        self._trash_empty_parents(original_parent)
 
-        for test_key in self.folder.drive.items_by_query(query):
-            test_key.remove()
+    @abc.abstractmethod
+    def _lookup_parent(self, key: str) -> DriveFolder:
+        raise NotImplementedError
+
+    def _new_remote_file(self, key: str) -> DriveFile:
+        return self._lookup_parent(key).new_file(key)
+
+    def handle_full_folder(self, key: str = None):
+        full_folder = self._lookup_parent(key).resolve()
+        error_message = "Remote root folder {} is full (max. 500.000 files exceeded)." \
+                            " Please switch to a different layout and consult"\
+                            " https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder.".format(full_folder)
+        raise RemoteError(error_message)
+
+    def _is_descendant_of_root(self, f: DriveFile) -> bool:
+        path = ""
+        for p in f.parents:
+            path = "/".join((p.name,path))
+            if p == self.folder:
+                self.annex.debug("Found key in {}".format(path))
+                return True
+        return False
+
+    def _trash_empty_parents(self, parent: DriveFolder):
+        for p in itertools.chain([parent], parent.parents):
+            if p.isempty():
+                self.annex.debug("Trashing empty folder {}".format(p.name))
+                p.trash()
+            else:
+                break
+
+    def _find_elsewhere(self, key: str) -> DriveFile:
+        query = "name='{}'".format(key)
+        query += " and mimeType != 'application/vnd.google-apps.folder'"
+        query += " and trashed = false"
+        files = self.folder.drive.items_by_query(query)
+
+        for f in files:
+            if self._is_descendant_of_root(f):
+                return f
+        raise FileNotFoundError
+
+    def _auto_fix_full(self):
+        self.annex.info("Remote folder full. Fixing...")
+        original_prefix = self.folder.name
+        new_root = None
+        try:
+            self.annex.info("Creating new root folder")
+            new_root = self.folder.parent.mkdir(self.folder.name+".new")
+            self.annex.info("Created as {}({})".format(new_root.name, new_root.id))
+        except:
+            raise RemoteError("Couldn't create new folder in {parent_name} ({parent_id})"
+                        " Nothing was changed."
+                        " Please consult https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder"
+                        " for instructions to fix it manually.".format(
+                                parent_name = self.folder.parent.name,
+                                parent_id = self.folder.parent.id
+                            )
+                        )
+        try:
+            new_name=original_prefix+".old"
+            self.annex.info("Moving old root to new one, renaming to {}".format(new_name))
+            self.folder.move(new_root, new_name=new_name)
+        except:
+            # new_root.rmdir()
+            raise RemoteError("Couldn't move the root folder."
+                        " Nothing was changed."
+                        " Please consult https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder"
+                        " for instructions to fix it manually."
+                        )
+        try:
+            self.annex.info("Renaming new root to original prefix: {}".format(original_prefix))
+            new_root.rename(original_prefix)
+        except:
+            raise RemoteError("Couldn't rename new folder to prefix."
+                        " Please manually rename {new_name} ({new_id}) to {prefix}.".format(
+                                                        new_name = new_root.name,
+                                                        new_id = new_root.id,
+                                                        prefix = original_prefix
+                                                    )
+                        )
+        self.annex.info("Success")
+
+        self.folder = new_root
+
+class NodirRemoteRoot(RemoteRoot):
+    def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
+        super().__init__(rootfolder, annex, uuid=uuid, local_appdir=local_appdir)
+        if next(self.folder.children(files=False), None):
+            self.has_subdirs = True
+        else:
+            self.has_subdirs = False
+        self.annex.info("WARNING: Google has introduced a maximum file count per folder."
+                        " Thus, `nodir` layout is no longer a good choice. Please consider migrating"
+                        " to a different layout. See https://github.com/Lykos153/git-annex-remote-googledrive#repository-layouts")
+
+    def _lookup_parent(self, key):
+        return self.folder
+
+    def handle_full_folder(self, key=None):
+        error_message = "Remote root folder {} is full (max. 500.000 files exceeded)." \
+                            " Please switch to a different layout and consult"\
+                            " https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder.".format(self.folder.name)
+        raise RemoteError(error_message)
+
+class LowerRemoteRoot(RemoteRoot):
+    def _lookup_parent(self, key: str) -> DriveFolder:
+        path = self.annex.dirhash_lower(key)
+        return self.folder.create_path(path)
+
+    def _migrate_remote_file(self, remote_file: DriveFile, new_parent: DriveFolder):
+        original_parent = remote_file.parent
+        # file will be replacing its own parent if migrating from directory layout
+        remote_file.move(new_parent, ignore_existing=(remote_file.name == remote_file.parent.name)) 
+        self._trash_empty_parents(original_parent)
+
+class DirectoryRemoteRoot(RemoteRoot):
+    def _lookup_parent(self, key: str) -> DriveFolder:
+        path = '/'.join((self.annex.dirhash_lower(key), key))
+        # FIXME: fails if migrating from lower layout
+        return self.folder.create_path(path)
+        
+class MixedRemoteRoot(RemoteRoot):
+    def _lookup_parent(self, key: str) -> DriveFolder:
+        path = self.annex.dirhash(key)
+        return self.folder.create_path(path)
+
+class NestedRemoteRoot(RemoteRoot):
+    def __init__(self, rootfolder: DriveFolder, annex: Annex, uuid: str=None, local_appdir: Union(str, PathLike)=None):
+        super().__init__(rootfolder, annex, uuid=uuid, local_appdir=local_appdir)
+        self.nested_prefix = "NESTED-"
+        self.reserved_name = self.nested_prefix+"00000000-0000-0000-0000-000000000000"
+        self.full_suffix = "-FULL"
+
+    @property
+    def current_folder(self):
+        if not hasattr(self, "_current_folder"):
+            self._current_folder = self.next_subfolder()
+        return self._current_folder
+
+    @current_folder.setter
+    def current_folder(self, new_target: DriveFolder):
+        self._current_folder = new_target
+
+    def next_subfolder(self):
+        if not hasattr(self, "_subfolders"):
+            self._subfolders = self._sub_generator(self.folder)
+        f = next(self._subfolders, None)
+        return f
+
+    def _sub_generator(self, parent_folder=None):
+        parent_folder = parent_folder or self.folder
+        try:
+            reserved_subfolder = parent_folder.mkdir(self.reserved_name)
+        except NumberOfChildrenExceededError:
+            return
+
+
+        query =     "'{}' in parents".format(self.folder.id)
+        query +=    " and not name contains '{}'".format(self.full_suffix)
+        query +=    " and name != '{}'".format(self.reserved_name)
+        query +=    " and mimeType = 'application/vnd.google-apps.folder'"
+        query +=    " and trashed = false"
+        yield from self.folder.drive.items_by_query(query)
+
+
+        while True:
+            try:
+                new_folder = parent_folder.mkdir(self.nested_prefix+str(uuid.uuid4()))
+            except NumberOfChildrenExceededError:
+                break
+            else:
+                yield new_folder
+
+        yield from self._sub_generator(parent_folder=reserved_subfolder)
+
+    def _auto_fix_full(self):
+        super()._auto_fix_full()
+        del self._subfolders
+        self.current_folder = self.next_subfolder()
+
+
+    def _new_remote_file(self, key) -> DriveFile:
+        if self.current_folder is None:
+            if self.annex.getconfig("auto_fix_full") == "yes":
+                if self.creator != "from_id":
+                    self._auto_fix_full()
+                else:
+                    raise RemoteError(  "Remote folder full."
+                                        " Can't fix automatically, because folder is specified by id."
+                                        " Please consult https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder"
+                                        " for instructions to do it manually."
+                                    )
+            else:
+                raise RemoteError(  "Remote folder is full (max. 500.000 files exceeded). Cannot upload key."
+                                    " Invoke `enableremote` with `auto_fix_full=yes`"
+                                    " or consult https://github.com/Lykos153/git-annex-remote-googledrive#fix-full-folder"
+                                    " for instructions to do it manually."
+                                )
+        return self.current_folder.new_file(key)
+
+    def handle_full_folder(self, key=None):
+        self.current_folder.rename(self.current_folder.name+self.full_suffix)
+        self.current_folder = self.next_subfolder()
 
 class Key():
     def __init__(self, root: RemoteRootBase, key: str, remote_file: DriveFile):
@@ -238,30 +455,3 @@ class ExportKey(Key):
     def __init__(self, root: ExportRemoteRoot, key: str, path: Union(str, PathLike), remote_file: DriveFile):
         super().__init__(root, key, remote_file)
         self.path = PurePath(path)
-
-class MigrationRoot(RemoteRootBase):
-    def __init__(self, rootfolder):
-        super().__init__(rootfolder)
-        self.migration_count = {'moved':0, 'deleted':0}
-
-    def migrate(self):
-        self._migration_traverse(self.folder, "")
-        return self.migration_count
-    
-    #@retry(wait=wait_fixed(2), retry=retry_conditions['retry'])   
-    def _migration_traverse(self, current_folder, current_path) -> Dict[str, int]:
-        #TODO: Use batch requests
-        if current_folder == self.folder:
-            for subfolder in current_folder.children(files=False):
-                self._migration_traverse(subfolder, current_path+"/"+subfolder.name)
-        else:
-            for file_ in current_folder.children():
-                if isinstance(file_, DriveFolder):
-                    self._migration_traverse(file_, current_path+"/"+file_.name)
-                else:
-                    print ( "Moving {}/{}".format(current_path,file_.name) )
-                    file_.move(self.folder)
-                    self.migration_count['moved'] += 1
-            print ("Deleting folder {}".format(current_path))
-            current_folder.remove()
-            self.migration_count['deleted'] += 1
