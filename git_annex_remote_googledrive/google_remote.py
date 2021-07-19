@@ -82,7 +82,7 @@ class GoogleRemote(annexremote.ExportRemote):
         self.configs = {
             'prefix': "The path to the folder that will be used for the remote."
                         " If it doesn't exist, it will be created.",
-            'gdrive_layout': "How the keys should be stored in the remote folder."
+            'layout': "How the keys should be stored in the remote folder."
                              "Available options: `nested`(default), `nodir`, `lower` and `mixed`.",
             'root_id': "Instead of the path, you can specify the ID of a folder."
                         " The folder must already exist. This will make it independent"
@@ -126,7 +126,7 @@ class GoogleRemote(annexremote.ExportRemote):
                 }
                 root_class = layout_mapping.get(self.layout, None)
                 if root_class is None:
-                    raise RemoteError("`gdrive_layout` must be one of {}".format(list(layout_mapping.keys())))
+                    raise RemoteError("`layout` must be one of {}".format(list(layout_mapping.keys())))
 
             if self.credentials is None:
                 raise RemoteError("Stored credentials are invalid. Please re-run `git-annex-remote-googledrive setup` and `git annex enableremote <remotename>`")
@@ -174,18 +174,22 @@ class GoogleRemote(annexremote.ExportRemote):
 
     @property
     def layout(self):
-        gdrive_layout = self.annex.getconfig("gdrive_layout")
-        rclone_layout = self.annex.getconfig("rclone_layout")
-        default_layout = "nodir"
-        self.annex.info("No layout was specified. Defaulting to `nodir` for compatibility. This will change in v2.0.0.")
+        layout = self.annex.getconfig("layout")
 
-        # delete rclone_layout but import it beforehand if gdrive_layout wasn't set
-        if rclone_layout:
-            if not gdrive_layout:
-                self.annex.setconfig("gdrive_layout", rclone_layout)
-            self.annex.setconfig("rclone_layout", "")
-        
-        return gdrive_layout or rclone_layout or default_layout
+        for import_layout_name in ["rclone_layout", "gdrive_layout"]:
+            import_layout = self.annex.getconfig(import_layout_name)
+            if import_layout and not layout:
+                layout = import_layout
+                self.annex.setconfig(import_layout_name, "")
+
+        self.annex.setconfig("layout", layout)
+        default_layout = "nodir"
+
+        if not layout:
+            layout = default_layout
+            self.annex.info("No layout was specified. Defaulting to `nodir` for compatibility. This will change in v2.0.0.")
+
+        return layout
 
     @property
     def info(self):
