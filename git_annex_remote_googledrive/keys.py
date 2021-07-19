@@ -257,6 +257,9 @@ class NestedRemoteRoot(RemoteRoot):
         self.reserved_name = self.nested_prefix+"00000000-0000-0000-0000-000000000000"
         self.full_suffix = "-FULL"
 
+    def _lookup_parent(self, key: str) -> DriveFolder:
+        return self.current_folder
+
     @property
     def current_folder(self):
         if not hasattr(self, "_current_folder"):
@@ -270,8 +273,7 @@ class NestedRemoteRoot(RemoteRoot):
     def next_subfolder(self):
         if not hasattr(self, "_subfolders"):
             self._subfolders = self._sub_generator(self.folder)
-        f = next(self._subfolders, None)
-        return f
+        return next(self._subfolders, None)
 
     def _sub_generator(self, parent_folder=None):
         parent_folder = parent_folder or self.folder
