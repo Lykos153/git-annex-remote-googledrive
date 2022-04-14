@@ -1,3 +1,5 @@
+[![PyPI version](https://badge.fury.io/py/git-annex-remote-googledrive.svg)](https://badge.fury.io/py/git-annex-remote-googledrive)
+
 # git-annex special remote for GoogleDrive
 
 git-annex-remote-googledrive adds direct and fast support for Google Drive to git-annex and comes with some awesome new features.
