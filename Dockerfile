@@ -7,4 +7,6 @@ COPY . /tmp/build
 RUN pip install /tmp/build
 RUN rm -r /tmp/build
 
+RUN adduser gituser
+
 CMD [ "bash" ]
