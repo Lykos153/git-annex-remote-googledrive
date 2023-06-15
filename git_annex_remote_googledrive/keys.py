@@ -275,25 +275,43 @@ class NestedRemoteRoot(RemoteRoot):
             self._subfolders = self._sub_generator(self.folder)
         return next(self._subfolders, None)
 
-    def _sub_generator(self, parent_folder=None):
+    def _ensure_reserved(self, parent_folder: DriveFolder):
+        query =     "'{}' in parents".format(parent_folder.id)
+        query +=    " and name = '{}'".format(self.reserved_name)
+        query +=    " and mimeType = 'application/vnd.google-apps.folder'"
+        query +=    " and trashed = false"
+        reserved_subfolder = None
+        for f in parent_folder.drive.items_by_query(query):
+            if f.isempty() and reserved_subfolder is None:
+                reserved_subfolder = f
+                continue
+            f.rename(self._new_folder_name())
+        if reserved_subfolder is None:
+            try:
+                reserved_subfolder = parent_folder.mkdir(self.reserved_name)
+            except NumberOfChildrenExceededError:
+                return
+        return reserved_subfolder
+            
+            
+    def _new_folder_name(self):
+        return self.nested_prefix+str(uuid.uuid4())
+    
+    def _sub_generator(self, parent_folder: DriveFolder=None):
         parent_folder = parent_folder or self.folder
-        try:
-            reserved_subfolder = parent_folder.mkdir(self.reserved_name)
-        except NumberOfChildrenExceededError:
-            return
+        reserved_subfolder = self._ensure_reserved(parent_folder)
 
-
-        query =     "'{}' in parents".format(self.folder.id)
+        query =     "'{}' in parents".format(parent_folder.id)
         query +=    " and not name contains '{}'".format(self.full_suffix)
         query +=    " and name != '{}'".format(self.reserved_name)
         query +=    " and mimeType = 'application/vnd.google-apps.folder'"
         query +=    " and trashed = false"
-        yield from self.folder.drive.items_by_query(query)
+        yield from parent_folder.drive.items_by_query(query)
 
 
         while True:
             try:
-                new_folder = parent_folder.mkdir(self.nested_prefix+str(uuid.uuid4()))
+                new_folder = parent_folder.mkdir(self._new_folder_name())
             except NumberOfChildrenExceededError:
                 break
             else:
